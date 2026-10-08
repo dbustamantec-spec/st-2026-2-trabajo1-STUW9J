@@ -1,0 +1,78 @@
+---
+lang: es
+format:
+  pdf:
+    toc: true
+    include-before-body:
+      text: |
+        \begin{titlepage}
+        \vspace*{\fill}
+        \begin{center}
+        \includegraphics[width=7cm]{C:/Users/Usuario/OneDrive/Documentos/Simulacion/logo.png}\\[1.25cm]
+        {\Large \textbf{Trabajo 1 - Tres series: descripción, operador de rezago, dependencia, pronóstico y argumentación}}\\[1.25cm]
+        {\Large \textbf{Por: Daniel Bustamante Cortés, Andrés Felipe López Díaz y Viviana Astrid León Oróstogue}}\\[1.25cm]
+        {\Large Departamento de Estadística, Facultad de Ciencias\\ Universidad Nacional de Colombia – Sede Medellín}\\[1.25cm]
+        {\Large Series de Tiempo (3009297)}\\[1.25cm]
+        {\Large Docente: Juan Pablo Valencia Arango}\\[1.25cm]
+        {\Large Octubre 30, 2026}
+        \end{center}
+        \vspace*{\fill}
+        \end{titlepage}
+---
+
+\newpage
+
+Se cargan las 3 bases de datos:
+
+```{r, results='hide'}
+source("../R/00-lectura.R")
+datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
+datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
+datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
+```
+
+## Las tres series y la pregunta de pronóstico
+
+**(a)** Para cada serie, una ficha verificada con código: nombre, unidad, frecuencia, fecha inicial y final, $T$, mínimo, máximo y media.
+
+- Ficha técnica para la serie 1:
+
+| **Atributo** | **Valor** |
+|:-----------------------------------|:-----------------------------------|
+| **Nombre** | Casos mensuales de enfermedad diarreica aguda notificados |
+| **Unidad** | Casos de enfermedad diarreica aguda notificados |
+| **Frecuencia** | Mensual |
+| **Fecha inicial** | `r min(datos1$fecha)` |
+| **Fecha final** | `r max(datos1$fecha)` |
+| **Número de observaciones (**$T$) | `r length(datos1$fecha)` |
+| **Mínimo** | `r min(datos1$y)` |
+| **Máximo** | `r max(datos1$y)` |
+| **Media** | `r mean(datos1$y)` |
+
+- Ficha técnica para la serie 2:
+
+| **Atributo** | **Valor** |
+|:-----------------------------------|:-----------------------------------|
+| **Nombre** | Afiliados activos a un programa de control de hipertensión |
+| **Unidad** | Personas inscritas y activas en el programa de control de hipertensión arterial |
+| **Frecuencia** | Semanal |
+| **Fecha inicial** | `r min(datos2$fecha)` |
+| **Fecha final** | `r max(datos2$fecha)` |
+| **Número de observaciones (**$T$) | `r length(datos2$fecha)` |
+| **Mínimo** | `r min(datos2$y)` |
+| **Máximo** | `r max(datos2$y)` |
+| **Media** | `r mean(datos2$y)` |
+
+- Ficha técnica para la serie 3:
+
+| **Atributo** | **Valor** |
+|:-----------------------------------|:-----------------------------------|
+| **Nombre** |  Consultas semanales por enfermedad respiratoria en un hospital |
+| **Unidad** | Consultas de medicina general cuyo motivo principal es una enfermedad respiratoria |
+| **Frecuencia** | Diaria |
+| **Fecha inicial** | `r min(datos3$fecha)` |
+| **Fecha final** | `r max(datos3$fecha)` |
+| **Número de observaciones (**$T$) | `r length(datos3$fecha)` |
+| **Mínimo** | `r min(datos3$y)` |
+| **Máximo** | `r max(datos3$y)` |
+| **Media** | `r mean(datos3$y)` |

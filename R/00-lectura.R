@@ -1,7 +1,6 @@
 leer_serie <- function(x, fuente, unidad) {
   stopifnot(is.character(fuente), is.character(unidad))
-  
-  # ---- Caso 1: objeto ts ---------------------------------------------------
+
   if (is.ts(x)) {
     frecuencia_val <- frequency(x)
     
@@ -57,8 +56,7 @@ leer_serie <- function(x, fuente, unidad) {
       fecha = fechas,
       y     = as.numeric(x)
     )
-    
-    # ---- Caso 2: ruta a un CSV -----------------------------------------------
+
   } else {
     if (!is.character(x) || length(x) != 1L || !file.exists(x)) {
       stop("x debe ser un objeto ts o una ruta válida a un archivo CSV.")
@@ -95,10 +93,8 @@ leer_serie <- function(x, fuente, unidad) {
     }
     
     if (length(unique(dif_dias)) == 1L && dif_dias[1] %in% c(1, 7)) {
-      # Diaria o semanal: se verifica en días
       frecuencia_val <- if (dif_dias[1] == 1) 365 else 52
     } else {
-      # Mensual, trimestral o anual: se verifica en meses de calendario
       lt <- as.POSIXlt(fechas)
       meses <- lt$year * 12 + lt$mon
       dif_meses <- unique(diff(meses))
@@ -107,7 +103,7 @@ leer_serie <- function(x, fuente, unidad) {
         stop("Las fechas no están equiespaciadas según una frecuencia admitida (diaria, semanal, mensual, trimestral o anual).")
       }
       
-      frecuencia_val <- 12 / dif_meses  # 12, 4 o 1
+      frecuencia_val <- 12 / dif_meses  
     }
     
     datos <- tibble::tibble(
