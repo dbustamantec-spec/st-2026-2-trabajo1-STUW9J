@@ -25,7 +25,9 @@ format:
 Se cargan las 3 bases de datos:
 
 ```{r, results='hide'}
+require(patchwork)
 source("../R/00-lectura.R")
+source("../R/01-graficos.R")
 datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
 datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
 datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
@@ -67,12 +69,95 @@ datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fu
 
 | **Atributo** | **Valor** |
 |:-----------------------------------|:-----------------------------------|
-| **Nombre** |  Consultas semanales por enfermedad respiratoria en un hospital |
+| **Nombre** | Consultas semanales por enfermedad respiratoria en un hospital |
 | **Unidad** | Consultas de medicina general cuyo motivo principal es una enfermedad respiratoria |
-| **Frecuencia** | Diaria |
+| **Frecuencia** | Semanal |
 | **Fecha inicial** | `r min(datos3$fecha)` |
 | **Fecha final** | `r max(datos3$fecha)` |
 | **Número de observaciones (**$T$) | `r length(datos3$fecha)` |
 | **Mínimo** | `r min(datos3$y)` |
 | **Máximo** | `r max(datos3$y)` |
 | **Media** | `r mean(datos3$y)` |
+
+**(b)** Para cada serie, a partir del contexto, la pregunta de pronóstico escrita por el equipo, la decisión que depende de la respuesta y el horizonte $H$ que esa decisión exige, en dos o tres líneas y coherente con la unidad y la frecuencia de la serie.
+
+- Para la serie 1: *¿Cuántos casos mensuales de EDA se esperarán el siguiente año?* La idea es pronosticar mensualmente los casos para los próximos 12 meses ($H=12$). La decisión es programar con tres meses de anticipación las brigadas y las compras de sales, con el fin de asignar el presupuesto anual aprobado en noviembre y evitar el doble de costo que implicarían las contrataciones de urgencia ante un brote. El horizonte cubre un año completo, lo cual permite planificar el presupuesto y las brigadas para cada mes del año que sigue.
+
+- Para la serie 2: *¿Cuántas dosis de medicamento semanales para la hipertensión se deben considerar para la siguiente compra?* La decisión es hallar la cantidad de medicamento que logre un equilibrio entre escasez y vencimiento de las dosis. Se desea pronosticar semanalmente los afiliados para las próximas 6 semanas ($H=6$), pues la compra se hace cada cuatro semanas y hay un plazo de entrega de dos.
+
+- Para la serie 3: *¿Cuántas consultas por enfermedades respiratorias se esperan en la semana del próximo bloque, y por tanto, cuántos médicos adicionales se deben contratar para tratar estas consultas?* La decisión es encontrar el número óptimo de médicos que minimize el número de pacientes en urgencias, sin representar una carga económica elevada por el número de personal. El objetivo es pronosticar semanalmente la cantidad de médicos a contratar para las siguientes 6 semanas ($H=6$), debido a que los médicos adicionales se contratan por cuatro semanas con dos de anticipación.
+
+**(c)** Una tabla de las tres series con la partición de la sección de reglas: $n_0$, $H$, número de orígenes para $h = 1$ y para $H$, y fechas que delimitan cada tramo.
+
+```{r, echo=FALSE}
+# Variables para construir la tabla
+n0_1 <- floor(0.8*length(datos1$fecha))
+n0_2 <- floor(0.8*length(datos2$fecha))
+n0_3 <- floor(0.8*length(datos3$fecha))
+
+T1 <- length(datos1$fecha)
+T2 <- length(datos2$fecha)
+T3 <- length(datos3$fecha)
+
+# Fechas de entrenamiento
+inicio1 <- datos1$fecha[1] 
+inicio2 <- datos2$fecha[1] 
+inicio3 <- datos3$fecha[1] 
+fin1 <- datos1$fecha[n0_1]
+fin2 <- datos2$fecha[n0_2]
+fin3 <- datos3$fecha[n0_3]
+
+# Fechas evaluación
+inicioe1 <- datos1$fecha[n0_1+1] 
+inicioe2 <- datos2$fecha[n0_2+1] 
+inicioe3 <- datos3$fecha[n0_3+1] 
+fine1 <- datos1$fecha[T1]
+fine2 <- datos2$fecha[T2]
+fine3 <- datos3$fecha[T3]
+```
+
+| Serie | $n_0$ | $H$ | Número de orígenes $h=1$ | Número de orígenes $h=H$ | Fechas de entrenamiento | Fechas de evaluación |
+|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| 1 | `r floor(0.8*length(datos1$fecha))` | 12 | `r length(n0_1:(T1-1))` | `r length(n0_1:(T1-12))` | `r inicio1` hasta `r fin1` | `r inicioe1` hasta `r fine1` |
+| 2 | `r floor(0.8*length(datos2$fecha))` | 6 | `r length(n0_2:(T2-1))` | `r length(n0_2:(T2-6))` | `r inicio2` hasta `r fin2` | `r inicioe2` hasta `r fine2` |
+| 3 | `r floor(0.8*length(datos3$fecha))` | 6 | `r length(n0_3:(T3-1))` | `r length(n0_3:(T3-6))` | `r inicio3` hasta `r fin3` | `r inicioe3` hasta `r fine3` |
+
+## Descripción del patrón
+
+**(a)** Para cada serie, el gráfico en el tiempo, con título, ejes con nombre y unidad, eje de fechas legible y un caption con el número de observaciones, y el gráfico de rezagos de $y_t$ contra $y_{t−k}$ para los rezagos que el equipo juzgue informativos, justificando la elección.
+
+Para definir el número de rezagos en cada gráfico de rezagos para las 3 series se tuvo en cuenta la información previamente definida del horizonte $H$, en cada caso. En la serie 1, 12 rezagos permiten ver el comportamiento dentro de un año, en la serie 2 y 3, al ser semanales y ambas tener un horizonte de 6 un rezago igual a este valor permite observar que pasa en este lapso de tiempo, que es el de interés.
+
+```{r, fig.height=5}
+g1 <- graficar_serie(datos1, titulo = "Casos mensuales de enfermedad diarreica aguda notificados")
+g2 <- grafico_rezagos(datos = datos1, k = 24)
+g1 / g2 
+```
+
+La serie de casos mensuales de EDA presenta una tendencia creciente a lo largo del tiempo, junto a un patrón estacional. El gráfico de rezagos muestra una relación lineal positiva entre las observaciones presentes ($y_t$) y pasadas ($y_{t-12}$), lo que confirma una alta autocorrelación y una fuerte dependencia estructural en los datos.
+
+```{r, fig.height=5}
+g1 <- graficar_serie(datos2, titulo = "Afiliados activos al programa de control de hipertensión")
+g2 <- grafico_rezagos(datos = datos2, k = 6)
+g1 / g2 
+```
+
+La serie de afiliados activos del programa de control de hipertensión presenta una tendencia creciente a lo largo del tiempo. El gráfico de rezagos muestra una relación lineal positiva entre las observaciones presentes ($y_t$) y pasadas ($y_{t-6}$), lo que confirma una alta autocorrelación y una fuerte dependencia estructural en los datos.
+
+```{r, fig.height=5}
+g1 <- graficar_serie(datos3, titulo = "Consultas semanales por enfermedad respiratoria")
+g2 <- grafico_rezagos(datos = datos3, k = 6)
+g1 / g2 
+```
+
+La serie de consultas semanales por enfermedad respiratoria no parece presentar ni tendencia ni estacionalidad. El gráfico de rezagos no muestra una relación lineal entre las observaciones presentes ($y_t$) y pasadas ($y_{t-6}$), por lo que no parece haber una fuerte dependencia estructural en los datos.
+
+**(b)** Para cada serie, la decisión argumentada sobre si tiene estacionalidad y, si la tiene, cuál es su período. Toda serie a la cual el equipo le atribuya estacionalidad lleva el gráfico estacional, con un trazo por ciclo sobre el índice de estación, y una descomposición clásica programada a mano con una media móvil centrada, en la versión aditiva o multiplicativa, cuya elección se justifica con evidencia gráfica y numérica; se muestran la tendencia estimada, los índices estacionales normalizados y el residuo. Toda serie a la cual no se le atribuya estacionalidad lleva la evidencia que lo sostiene.
+
+Como se vió en el punto anterior, la única serie que parece tener estacionalidad es la 1, con período $s=12$, pues hay un solo ciclo por año, se nota un solo pico y un solo valle por año. Además, la amplitud estacional crece con el nivel general, por lo que se elige una descomposición multiplicativa: $y_t = T_t \times S_t \times R_t$. La media móvil centrada suaviza la tendencia y, al sacar la tendencia, los índices estacionales normalizados muestran que los meses de marzo a junio son sistemáticamente superiores a la media anual, mientras que septiembre y octubre son los más bajos. El residuo se mantiene alrededor de cero sin un patrón anual claro, lo que refuerza la decisión de atribuir estacionalidad a la serie 1.
+
+```{r, fig.height=6, fig.width=9}
+grafico_estacional(datos = datos1, s = 12, tipo = "multiplicativo")
+```
+
+En la descomposición, la tendencia estimada es creciente a lo largo del periodo, los índices estacionales normalizados tienen valores alrededor de 1 y capturan la estructura anual del brote diarreico, y el residuo no presenta un patrón sistemático restante. Por tanto, la serie 1 se clasifica como una serie con tendencia creciente y estacionalidad anual de tipo multiplicativo.
