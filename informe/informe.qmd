@@ -25,9 +25,10 @@ format:
 Se cargan las 3 bases de datos:
 
 ```{r, results='hide'}
-require(patchwork)
+require(patchwork);require(ggplot2)
 source("../R/00-lectura.R")
 source("../R/01-graficos.R")
+source("../R/02-operadores.R")
 datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
 datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
 datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
@@ -161,3 +162,66 @@ grafico_estacional(datos = datos1, s = 12, tipo = "multiplicativo")
 ```
 
 En la descomposición, la tendencia estimada es creciente a lo largo del periodo, los índices estacionales normalizados tienen valores alrededor de 1 y capturan la estructura anual del brote diarreico, y el residuo no presenta un patrón sistemático restante. Por tanto, la serie 1 se clasifica como una serie con tendencia creciente y estacionalidad anual de tipo multiplicativo.
+
+**(c)** Para cada serie, la clasificación de su patrón, apoyada en el gráfico y en el correlograma de
+la serie sin transformar con $m = mín{⌊T /4⌋, 24}$ rezagos, con la lectura de la forma de ese
+correlograma.
+
+- Para la serie 1:
+
+```{r, fig.width=7}
+m <- min(length(datos1$y), 24)
+a <- correlograma(datos1, m)
+b <- graficar_serie(datos1, titulo = "Casos mensuales de EDA")
+a | b
+```
+
+En los primeros rezagos, el correlograma tiene autocorrelaciones altamente significativas, las cuales van disminuyendo lentamente a medida que el rezago crece, esto indica tendencia. Por otro lado, sobre el comportamiento descrito se notan picos cuando el rezago es multiplo de 12 (serie mensual), por lo que la serie parece tener estacionalidad. Estas características son aún más claras en la serie.
+
+- Para la serie 2:
+
+```{r, fig.width=8}
+m <- min(length(datos2$y), 24)
+a <- correlograma(datos2, m)
+b <- graficar_serie(datos2, titulo = "Afiliados al programa de hipertensión")
+a | b
+```
+
+El comportamiento de decaimiento lento en el correlograma es evidencia clara de que la serie sin transformaciones tiene tendencia. Con base en el gráfico de la serie se recalca lo ya dicho y se observa que la tendencia es de crecimiento.
+
+- Para la serie 3:
+
+```{r, fig.width=8}
+m <- min(length(datos3$y), 24)
+a <- correlograma(datos3, m)
+b <- graficar_serie(datos3, titulo = "Consultas por enfermedad respiratoria")
+a | b
+```
+
+Para este caso no se logran identificar patrones de estacionalidad o tendencia de la serie relacionada a las consultas por enfermedades respiratorias. No parece haber una estructura visible clara ni muchos rezagos que superen la banda. Aunque si se nota un nivel constante, pues en el gráfico de la serie se nota que se oscila siempre sobre 120 aproximadamente.
+
+## Operador de rezago
+
+**(a)** Escriba `diferenciar(y, d, D, s)`, que aplica $(1 − B)^d(1 − B^s)^D$ sin usar `diff()`, y
+`polinomio_rezago(coef)`, que recibe los coeficientes de $c(B) = 1+c_1B +· · ·+c_pB^p$ y devuelve sus raíces con su módulo. Verifique `diferenciar()` contra `diff()` en un bloque de verificación.
+
+```{r}
+# Código de verificación de diferenciar() vs. diff()
+set.seed(67)
+y_prueba <- rnorm(15)
+
+d_prueba <- 1
+D_prueba <- 1
+s_prueba <- 12
+
+res_manual <- diferenciar(y_prueba, d = d_prueba, D = D_prueba, s = s_prueba)
+
+res_diff <- diff(y_prueba, lag = s_prueba, differences = D_prueba)
+res_diff <- diff(res_diff, lag = 1, differences = d_prueba)
+print("diferenciar vs. diff")
+print(res_manual);print(res_diff)
+
+print("c(B) = 1 - 2B + 3B^2")
+print("Raíces y módulos del polinomio de prueba:")
+print(polinomio_rezago(c(-2, 3)))
+```
