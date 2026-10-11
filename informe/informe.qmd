@@ -14,7 +14,7 @@ format:
         {\Large Departamento de Estadística, Facultad de Ciencias\\ Universidad Nacional de Colombia – Sede Medellín}\\[1.25cm]
         {\Large Series de Tiempo (3009297)}\\[1.25cm]
         {\Large Docente: Juan Pablo Valencia Arango}\\[1.25cm]
-        {\Large Octubre 30, 2026}
+        {\Large Octubre 15, 2026}
         \end{center}
         \vspace*{\fill}
         \end{titlepage}
@@ -22,13 +22,12 @@ format:
 
 \newpage
 
-Se cargan las 3 bases de datos:
-
-```{r, results='hide'}
-require(patchwork);require(ggplot2)
+```{r, echo=FALSE}
+library(patchwork);library(ggplot2)
 source("../R/00-lectura.R")
 source("../R/01-graficos.R")
 source("../R/02-operadores.R")
+source("../R/03-dependencia.R")
 datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
 datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
 datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
@@ -163,9 +162,7 @@ grafico_estacional(datos = datos1, s = 12, tipo = "multiplicativo")
 
 En la descomposición, la tendencia estimada es creciente a lo largo del periodo, los índices estacionales normalizados tienen valores alrededor de 1 y capturan la estructura anual del brote diarreico, y el residuo no presenta un patrón sistemático restante. Por tanto, la serie 1 se clasifica como una serie con tendencia creciente y estacionalidad anual de tipo multiplicativo.
 
-**(c)** Para cada serie, la clasificación de su patrón, apoyada en el gráfico y en el correlograma de
-la serie sin transformar con $m = mín{⌊T /4⌋, 24}$ rezagos, con la lectura de la forma de ese
-correlograma.
+**(c)** Para cada serie, la clasificación de su patrón, apoyada en el gráfico y en el correlograma de la serie sin transformar con $m = mín{⌊T /4⌋, 24}$ rezagos, con la lectura de la forma de ese correlograma.
 
 - Para la serie 1:
 
@@ -202,8 +199,7 @@ Para este caso no se logran identificar patrones de estacionalidad o tendencia d
 
 ## Operador de rezago
 
-**(a)** Escriba `diferenciar(y, d, D, s)`, que aplica $(1 − B)^d(1 − B^s)^D$ sin usar `diff()`, y
-`polinomio_rezago(coef)`, que recibe los coeficientes de $c(B) = 1+c_1B +· · ·+c_pB^p$ y devuelve sus raíces con su módulo. Verifique `diferenciar()` contra `diff()` en un bloque de verificación.
+**(a)** Escriba `diferenciar(y, d, D, s)`, que aplica $(1 − B)^d(1 − B^s)^D$ sin usar `diff()`, y `polinomio_rezago(coef)`, que recibe los coeficientes de $c(B) = 1+c_1B +· · ·+c_pB^p$ y devuelve sus raíces con su módulo. Verifique `diferenciar()` contra `diff()` en un bloque de verificación.
 
 ```{r}
 # Código de verificación de diferenciar() vs. diff()
@@ -275,4 +271,144 @@ ggplot(df2, aes(x = Parte_Real, y = Parte_imaginaria)) +
 
 - Serie 3: No es necesario aplicar transformaciones, pues no se presentó ni estacionalidad ni tendencia. El polinomio sería igual a $1$, por tanto no tiene sentido hacer la gráfica ya que no habría puntos.
 
-\(c\) Para cada serie, una tabla con la varianza muestral y $r_1$ de la serie y de cada transformación candidata. Elija la transformación con la cual la serie resultante es plausiblemente estacionaria, que puede ser ninguna, y defienda que no aplica diferencias de más, con la identidad $Var(∇Y_t) = 2γ(0) − 2γ(1)$ y con lo que le ocurre a $r_1$ cuando se diferencia una serie que ya era estacionaria. Verifique sobre los datos que la media de la serie transformada coincide con lo que la transformación debe dejar.
+**(c)** Para cada serie, una tabla con la varianza muestral y $r_1$ de la serie y de cada transformación candidata. Elija la transformación con la cual la serie resultante es plausiblemente estacionaria, que puede ser ninguna, y defienda que no aplica diferencias de más, con la identidad $Var(∇Y_t) = 2γ(0) − 2γ(1)$ y con lo que le ocurre a $r_1$ cuando se diferencia una serie que ya era estacionaria. Verifique sobre los datos que la media de la serie transformada coincide con lo que la transformación debe dejar.
+
+**(d)** A mano, en el informe. Pruebe que la función de pronóstico de Holt, $\hat{Y}_{T+h} = L_T + \hat{T}_Th$, satisface $(1 − B)^2\hat{Y}_{T+h} = 0$ para $h ≥ 3$, y que la de Holt–Winters aditivo con período $s$, $\hat{Y}_{T+h}=L_T+\hat{T}_Th+S_{T+h-s\lceil h/s \rceil}$, satisface $(1 − B)(1 − B^s)\hat{Y}_{T+h} = 0$ para $h ≥ s + 2$, con el operador actuando sobre $h$. Escriba la solución general de cada ecuación en diferencias y diga qué raíces del polinomio característico corresponden a la tendencia y cuáles a la estacionalidad.
+
+- Demostración de que $\hat{Y}_{T+h} = L_T + \hat{T}_Th$ satisface $(1 − B)^2\hat{Y}_{T+h} = 0$ para $h≥3$:
+
+$$\begin{aligned}
+(1-B)^2\hat{Y}_{T+h} = (1-2B+B^2)\hat{Y}_{T+h} \\
+= \hat{Y}_{T+h}-2B\hat{Y}_{T+h}+B^2\hat{Y}_{T+h} \\
+= \hat{Y}_{T+h}-2\hat{Y}_{T+h-1}+\hat{Y}_{T+h-2} \\
+= L_T+\hat{T}_Th-2[L_T+\hat{T}_T(h-1)]+L_T+\hat{T}_T(h-2) \\
+= L_T+\hat{T}_Th-2L_T-2\hat{T}_Th+2\hat{T}_T+L_T+\hat{T}_Th-2\hat{T}_T \\
+= (2L_T-2L_T) + (2\hat{T}_Th-2\hat{T}_Th) + (2\hat{T}-2\hat{T}) \\
+= 0
+\end{aligned}$$
+
+- Demostración de que $\hat{Y}_{T+h} = L_T + \hat{T}_Th$, satisface $(1 − B)(1 − B^s)\hat{Y}_{T+h} = 0$ para $h ≥ 3$:
+
+$$\begin{aligned}
+(1-B^s)\hat{Y}_{T+h}=\hat{Y}_{T+h}-\hat{Y}_{T+h-s} \\
+= L_T + \hat{T}_Th-L_T-\hat{T}_T(h-s) \\
+= \hat{T}_Th-\hat{T}_Th-\hat{T}_Ts = \hat{T}_Ts 
+\end{aligned}$$
+
+$$\begin{aligned}
+(1-B)(1-B^s)\hat{Y}_{T+h} = (1-B)\hat{T}_Ts \\
+= \hat{T}_Ts - \hat{T}_Ts \ (No \ depende  \ de \ h) \\
+= 0
+\end{aligned}$$
+
+Se tiene que $h \ge s+2$, pues asegura que el menor valor posible para $h-s-1$ sea $1$, un horizonte menor a $1$ no tiene sentido.
+
+Para Holt $(1-B)^2 = 0$ la raíz es $B = 1$ con multiplicidad 2. La solución general para una raíz como esta está dada por:
+
+$\hat{Y}_{T+h}=c_1+c_2h$
+
+Para Holt-Winters $(1-B)(1-B^s)=0$ el factor $(1-B)$ aporta una raíz $B=1$ y el factor $(1-B^s)$ aporta $s$ raíces de la forma $B=e^{i2\pi k/s}, \ k=0,1,2,...,s-1$. Hay $s+1$ raíces, con solución general:
+
+$\hat{Y}_{T+h}=c_1+c_2h+\sum_{k=1}^{\lfloor s/2 \rfloor} \alpha_kcos(\frac{2\pi kh}{s})+\beta_ksin(\frac{2\pi kh}{s})$ La raíz $B=1$ corresponde a la tendencia de la serie, mientras que las raíces $B=e^{i2\pi k/s}$ se refieren a la estacionalidad de período s.
+
+## Dependencia y estacionariedad
+
+**(a)** Escriba `pacf_dl(r)`, la autocorrelación parcial muestral por la recursión de Durbin y Levinson a partir de $r_1,..., r_m$, y verifíquela contra `pacf()` con máxima diferencia absoluta menor que $10^{−10}$. Para cada serie presente ACF y PACF muestrales hasta el rezago $m$, con la banda de ruido blanco $±1,96/\sqrt{n}$ y la banda de Bartlett $±1,96\sqrt{(1 + 2 \sum_{i<h}r_i^2)/n},$ y diga cuál de las dos corresponde a cada pregunta que se le hace al correlograma.
+
+Para comparar `pacf()` contra `pacf_dl(r)` se usa los datos de la serie 1 con 24 rezagos :
+
+```{r}
+acfs <- acf_muestral(datos1$y, m = 24)
+pacf_dl_ <- pacf_dl(r = acfs)
+pacf_R <- pacf(datos1$y, lag.max = 24, plot = FALSE)$acf[, 1, 1]
+
+max_dif <- max(abs(pacf_dl_ - pacf_R))
+print(paste("Máxima diferencia absoluta: ", max_dif)) 
+```
+
+A continuación se presentan ACF y PACF muestrales para cada una de las series. Para esto se crea una nueva función, `correlograma_muestral(datos, m)`, que usa las autocorrelaciones parciales determinadas con `pacf_dl(r)` en lugar de la función base de R `pacf()` como lo hace `correlograma()`. Esta función se creó en el archivo `informe.qmd`, sin embargo, se decidió no mostrarlo en el archivo pdf debido al tamaño extendido del código.
+
+```{r, echo=FALSE}
+correlograma_muestral <- function(datos, m = NULL) {
+  library(patchwork)
+  library(ggplot2)
+  y_vec <- if(is.data.frame(datos)) datos$y else as.numeric(datos)
+  n <- length(y_vec)
+  
+  if(is.null(m)) {
+    m <- min(24, floor(n/ 4))}
+  
+  media <- mean(y_vec)
+  acfs <- numeric(m)
+  denominador <- sum((y_vec - media)^2)
+  
+  ci <- 0.95
+  climo <- qnorm((1 + ci)/2) / sqrt(n)
+  banda_inf <- -climo
+  banda_sup <- climo
+  
+  for (j in 1:m) {
+    numerador <- 0
+    for (i in (j+1):n) {
+      numerador <- numerador + (y_vec[i] - media) * (y_vec[i-j] - media)
+    }
+    acfs[j] <- numerador / denominador
+  }
+  
+  bartlett_sup <- climo * sqrt(1 + 2 * c(0, cumsum(acfs[-m]^2)))
+  bartlett_inf <- -bartlett_sup
+  
+  pacfs <- pacf_dl(acfs)
+  
+  df <- data.frame(Rezagos = 1:m, acfs = acfs, pacfs = pacfs, 
+                   bartlett_sup = bartlett_sup, bartlett_inf = bartlett_inf)
+  
+  # Correlogramas
+  g1 <- ggplot(df, aes(x = Rezagos, y = acfs)) +
+    geom_segment(aes(xend = Rezagos, yend = 0), color = "black", linewidth = 1) + 
+    geom_hline(yintercept = 0, color = "black") + 
+    geom_hline(yintercept = c(banda_inf, banda_sup), color = "red", linetype = "dashed") + 
+    geom_line(aes(y = bartlett_sup), color = "blue", linetype = "dashed") +
+    geom_line(aes(y = bartlett_inf), color = "blue", linetype = "dashed") +
+    labs(title ="Correlograma ACF", x = "Rezago", y = "Autocorrelación") +
+    theme_minimal() + 
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  
+  g2 <- ggplot(df, aes(x = Rezagos, y = pacfs)) +
+    geom_segment(aes(xend = Rezagos, yend = 0), color = "black", linewidth = 1) + 
+    geom_hline(yintercept = 0, color = "black") + 
+    geom_hline(yintercept = c(banda_inf, banda_sup), color = "red", linetype = "dashed") + 
+    labs(title ="Correlograma PACF", x = "Rezago", y = "Autocorrelación") +
+    theme_minimal() + 
+    theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  
+  attr(acfs, "acfs") <- acfs
+  return(g1 / g2)
+}
+```
+
+La banda de ruido blanco (roja) responde a ¿La serie es ruido blanco puro? Mientras que la banda de Bartlett responde a ¿El rezago $h$ aporta algo significativo dado que los anteriores son reales?
+
+- Para la serie 1:
+
+```{r}
+correlograma_muestral(datos = datos1, m = 24)
+```
+
+A partir del correlograma ACF se nota que todos los rezagos superan la banda de ruido blanco, por lo que se confirma que la serie posee estructura, es posible aplicar modelos. Con la banda de Bartlett se aprecia que no todas las barras están dentro de esta, por tanto el sistema mantiene una memoria persistente por su estructura estacional, haciendo que observaciones separadas por un año completo sigan fuertemente correlacionadas, superando el umbral de Bartlett.
+
+- Para la serie 2:
+
+```{r}
+correlograma_muestral(datos = datos2, m = 24)
+```
+
+Se observa que todos los rezagos superan la banda de ruido blanco, así que se concluye que la serie posee estructura. A pesar de que la banda de Bartlett se ensancha en cada paso, los primeros 13 rezagos logran perforarla hacia afuera, y los rezagos posteriores se mantienen cerca del límite. Esto indica que la memoria de la serie no se corta a corto plazo, sino que arrastra una fuerte inercia prolongada debido a su tendencia no estacionaria
+
+- Para la serie 3:
+
+```{r}
+correlograma_muestral(datos = datos3, m = 24)
+```
+
+En cuanto a la banda de ruido blanco, se puede observar que los rezagos 1 y 2 tienen autocorrelaciones significativas, por lo que sí parece haber estructura temporal. Los rezagos 1 y 2 se salen de la banda de Bartlett, pero a partir del rezago 3, las autocorrelaciones caen y se mantienen dentro de esta banda, esto es evidencia de que la memoria de la serie se apaga rápidamente y se corta después del segundo periodo.

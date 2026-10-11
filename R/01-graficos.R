@@ -44,15 +44,22 @@ correlograma <- function(datos, m = NULL) {
     acfs[j] <- numerador / denominador
   }
   
+  bartlett_sup <- climo * sqrt(1 + 2 * c(0, cumsum(acfs[-m]^2)))
+  bartlett_inf <- -bartlett_sup
+  
   pacfs <- pacf(y_vec, lag.max = m, plot = FALSE)
   pacfs <- as.vector(pacfs$acf)
-  df <- data.frame(Rezagos = 1:m, acfs = acfs, pacfs = pacfs)
+  
+  df <- data.frame(Rezagos = 1:m, acfs = acfs, pacfs = pacfs, 
+                   bartlett_sup = bartlett_sup, bartlett_inf = bartlett_inf)
   
   # Correlogramas
   g1 <- ggplot(df, aes(x = Rezagos, y = acfs)) +
     geom_segment(aes(xend = Rezagos, yend = 0), color = "black", linewidth = 1) + 
     geom_hline(yintercept = 0, color = "black") + 
     geom_hline(yintercept = c(banda_inf, banda_sup), color = "red", linetype = "dashed") + 
+    geom_line(aes(y = bartlett_sup), color = "blue", linetype = "dashed") +
+    geom_line(aes(y = bartlett_inf), color = "blue", linetype = "dashed") +
     labs(title ="Correlograma ACF", x = "Rezago", y = "Autocorrelación") +
     theme_minimal() + 
     theme(plot.title = element_text(face = "bold", hjust = 0.5))
@@ -67,7 +74,6 @@ correlograma <- function(datos, m = NULL) {
   
   attr(acfs, "acfs") <- acfs
   return(g1 / g2)
-  
 }
 
 # Rezagos
