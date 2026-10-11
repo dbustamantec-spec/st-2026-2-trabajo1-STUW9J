@@ -225,3 +225,54 @@ print("c(B) = 1 - 2B + 3B^2")
 print("Raíces y módulos del polinomio de prueba:")
 print(polinomio_rezago(c(-2, 3)))
 ```
+
+**(b)** Para cada serie, proponga las transformaciones candidatas que su diagnóstico sugiere, incluidas las transformaciones previas de escala si las hay, y escriba cada una como polinomio en B. Calcule las raíces de cada polinomio con `polinomio_rezago()`, ubíquelas en el plano complejo y explique qué componente determinista elimina cada factor.
+
+- Serie 1: Ya vimos que esta serie tiene tendencia y estacionalidad con período 12, por lo que se aplica una diferencia para quitar la tendencia y una estacional para la estacionalidad. Además, esta serie tiene comportamiento multiplicativo, pues a medida que pasa el tiempo la amplitud de las variaciones estacionales crece, debido a esto lo ideal es aplicar una transformación a los datos, un logaritmo natural. Se tendría entonces,
+
+$$\nabla_1\nabla_{12}\ln(y_t)=(1-B)(1-B^{12})=1-B^{12}-B+B^{13}=1-B-B^{12}+B^{13}$$
+
+```{r}
+datos1$log <- log(datos1$y)
+coefs_1 <- c(-1, rep(0, 10), -1, 1)
+raices_1 <- polinomio_rezago(coefs_1)
+df1 <- data.frame(Parte_Real = Re(raices_1$Raiz),
+                  Parte_imaginaria = Im(raices_1$Raiz))
+ggplot(df1, aes(x = Parte_Real, y = Parte_imaginaria)) + 
+  annotate("path", x = cos(seq(0, 2*pi, length.out = 100)),
+           y = sin(seq(0, 2*pi, length.out = 100)), linetype = "dashed") + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point(color = "red") + 
+  labs(title = "Plano complejo para la serie 1", x = "Parte real", 
+       y = "Parte imaginaria") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5)) +
+  coord_fixed(ratio = 1, xlim = c(-1.1, 1.1), ylim = c(-1.1, 1.1))
+```
+
+- Serie 2: Esta serie cuanta con tendencia, por lo que es suficiente aplicar una diferencia para eliminarla:
+
+$$\nabla_1=(1-B)$$
+
+```{r}
+coefs_2 <- c(-1)
+raices_2 <- polinomio_rezago(coefs_2)
+df2 <- data.frame(Parte_Real = Re(raices_2$Raiz),
+                  Parte_imaginaria = Im(raices_2$Raiz))
+ggplot(df2, aes(x = Parte_Real, y = Parte_imaginaria)) + 
+  annotate("path", x = cos(seq(0, 2*pi, length.out = 100)),
+           y = sin(seq(0, 2*pi, length.out = 100)), linetype = "dashed") + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point(color = "red") + 
+  labs(title = "Plano complejo para la serie 2", x = "Parte real", 
+       y = "Parte imaginaria") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5)) +
+  coord_fixed(ratio = 1, xlim = c(-1.1, 1.1), ylim = c(-1.1, 1.1))
+```
+
+- Serie 3: No es necesario aplicar transformaciones, pues no se presentó ni estacionalidad ni tendencia. El polinomio sería igual a $1$, por tanto no tiene sentido hacer la gráfica ya que no habría puntos.
+
+\(c\) Para cada serie, una tabla con la varianza muestral y $r_1$ de la serie y de cada transformación candidata. Elija la transformación con la cual la serie resultante es plausiblemente estacionaria, que puede ser ninguna, y defienda que no aplica diferencias de más, con la identidad $Var(∇Y_t) = 2γ(0) − 2γ(1)$ y con lo que le ocurre a $r_1$ cuando se diferencia una serie que ya era estacionaria. Verifique sobre los datos que la media de la serie transformada coincide con lo que la transformación debe dejar.
