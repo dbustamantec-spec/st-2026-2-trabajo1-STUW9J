@@ -48,3 +48,25 @@ acf_muestral <- function(datos, m = NULL){
   return(acfs)
 }
 
+# ljung-box
+ljung_box <- function(r, T, m, p = 0) {
+  T <- as.numeric(T)
+  m <- as.numeric(m)
+  p <- as.numeric(p)
+  
+  h <- 1:m
+  r_m <- r[1:m]
+  
+  Q_m <- T * (T + 2) * sum((r_m^2) / (T - h))
+  df <- m - p
+  
+  val_critico <- qchisq(0.95, df)
+  p_val <- pchisq(Q_m, df, lower.tail = FALSE)
+  
+  return(list(
+    estadistico = Q_m,
+    grados_libertad = df,
+    valor_critico_5 = val_critico,
+    p_valor = p_val
+  ))
+}

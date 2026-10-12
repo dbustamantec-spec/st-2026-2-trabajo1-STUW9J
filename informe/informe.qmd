@@ -453,32 +453,33 @@ $\hat{Y}_{T+h}=c_1+c_2h+\sum_{k=1}^{\lfloor s/2 \rfloor} \alpha_kcos(\frac{2\pi 
 
 **(a)** Escriba `pacf_dl(r)`, la autocorrelación parcial muestral por la recursión de Durbin y Levinson a partir de $r_1,..., r_m$, y verifíquela contra `pacf()` con máxima diferencia absoluta menor que $10^{−10}$. Para cada serie presente ACF y PACF muestrales hasta el rezago $m$, con la banda de ruido blanco $±1,96/\sqrt{n}$ y la banda de Bartlett $±1,96\sqrt{(1 + 2 \sum_{i<h}r_i^2)/n},$ y diga cuál de las dos corresponde a cada pregunta que se le hace al correlograma.
 
-Para comparar `pacf()` contra `pacf_dl(r)` se usa los datos de la serie 1 con 24 rezagos :
+Para comparar `pacf()` contra `pacf_dl(r)` se usa los datos de la serie 1 transformada (logaritmo y diferencia estacional) con 24 rezagos :
 
 ```{r}
-acfs <- acf_muestral(datos1$y, m = 24)
+a <- na.omit(datos1$dif12_logy)
+acfs <- acf_muestral(a, m = 24)
 pacf_dl_ <- pacf_dl(r = acfs)
-pacf_R <- pacf(datos1$y, lag.max = 24, plot = FALSE)$acf[, 1, 1]
+pacf_R <- pacf(a, lag.max = 24, plot = FALSE)$acf[, 1, 1]
 
 max_dif <- max(abs(pacf_dl_ - pacf_R))
 print(paste("Máxima diferencia absoluta: ", max_dif)) 
 ```
 
-A continuación se presentan ACF y PACF muestrales para cada una de las series. Para esto se crea una nueva función, `correlograma_muestral(datos, m)`, que usa las autocorrelaciones parciales determinadas con `pacf_dl(r)` en lugar de la función base de R `pacf()` como lo hace `correlograma()`. Esta función se creó en el archivo `informe.qmd`, sin embargo, se decidió no mostrarlo en el archivo pdf debido al tamaño extendido del código.
+A continuación se presentan ACF y PACF muestrales para cada una de las series. Para esto se crea una nueva función, `correlograma_muestral(y, m)`, que usa las autocorrelaciones parciales determinadas con `pacf_dl(r)` en lugar de la función base de R `pacf()` como lo hace `correlograma()`. Esta función se creó en el archivo `informe.qmd`, sin embargo, se decidió no mostrarlo en el archivo pdf debido al tamaño extendido del código.
 
 ```{r, echo=FALSE}
-correlograma_muestral <- function(datos, m = NULL) {
+correlograma_muestral <- function(y, m = NULL) {
   library(patchwork)
   library(ggplot2)
-  y_vec <- if(is.data.frame(datos)) datos$y else as.numeric(datos)
-  n <- length(y_vec)
+  y <- na.omit(y)
+  n <- length(y)
   
   if(is.null(m)) {
     m <- min(24, floor(n/ 4))}
   
-  media <- mean(y_vec)
+  media <- mean(y)
   acfs <- numeric(m)
-  denominador <- sum((y_vec - media)^2)
+  denominador <- sum((y - media)^2)
   
   ci <- 0.95
   climo <- qnorm((1 + ci)/2) / sqrt(n)
@@ -488,7 +489,7 @@ correlograma_muestral <- function(datos, m = NULL) {
   for (j in 1:m) {
     numerador <- 0
     for (i in (j+1):n) {
-      numerador <- numerador + (y_vec[i] - media) * (y_vec[i-j] - media)
+      numerador <- numerador + (y[i] - media) * (y[i-j] - media)
     }
     acfs[j] <- numerador / denominador
   }
@@ -519,8 +520,7 @@ correlograma_muestral <- function(datos, m = NULL) {
     labs(title ="Correlograma PACF", x = "Rezago", y = "Autocorrelación") +
     theme_minimal() + 
     theme(plot.title = element_text(face = "bold", hjust = 0.5))
-  
-  attr(acfs, "acfs") <- acfs
+
   return(g1 / g2)
 }
 ```
@@ -530,23 +530,137 @@ La banda de ruido blanco (roja) responde a ¿La serie es ruido blanco puro? Mien
 - Para la serie 1:
 
 ```{r}
-correlograma_muestral(datos = datos1, m = 24)
+correlograma_muestral(y = datos1$dif12_logy, m = 24)
 ```
 
-A partir del correlograma ACF se nota que todos los rezagos superan la banda de ruido blanco, por lo que se confirma que la serie posee estructura, es posible aplicar modelos. Con la banda de Bartlett se aprecia que no todas las barras están dentro de esta, por tanto el sistema mantiene una memoria persistente por su estructura estacional, haciendo que observaciones separadas por un año completo sigan fuertemente correlacionadas, superando el umbral de Bartlett.
+A partir del correlograma se nota que la ACF muestral es compatible con ruido blanco en todos los rezagos salvo el 12, donde supera tanto la banda de ruido blanco como la de Bartlett. La PACF presenta picos negativos en los rezagos 12 y 24 que decaen. Esa forma (ACF que se corta tras el rezago estacional y PACF que decae en múltiplos de 12) es la de una media móvil estacional de orden 1. No quedan tendencia ni dependencia de corto plazo relevante: los rezagos 1 a 11 están dentro de las bandas.
 
 - Para la serie 2:
 
 ```{r}
-correlograma_muestral(datos = datos2, m = 24)
+correlograma_muestral(y = datos2$dif_y, m = 24)
 ```
 
-Se observa que todos los rezagos superan la banda de ruido blanco, así que se concluye que la serie posee estructura. A pesar de que la banda de Bartlett se ensancha en cada paso, los primeros 13 rezagos logran perforarla hacia afuera, y los rezagos posteriores se mantienen cerca del límite. Esto indica que la memoria de la serie no se corta a corto plazo, sino que arrastra una fuerte inercia prolongada debido a su tendencia no estacionaria
+La ACF muestral se corta después del rezago 1 y los demás rezagos están dentro de las bandas, excepto el rezago 14. La PACF decae con signo negativo (en los rezagos 1 a 3). Esa forma es la de una media móvil de orden 1, MA(1), con coeficiente negativo. No hay picos en múltiplos de ningún período, así que no se observa estacionalidad.
 
 - Para la serie 3:
 
 ```{r}
-correlograma_muestral(datos = datos3, m = 24)
+correlograma_muestral(y = datos3$y, m = 24)
 ```
 
 En cuanto a la banda de ruido blanco, se puede observar que los rezagos 1 y 2 tienen autocorrelaciones significativas, por lo que sí parece haber estructura temporal. Los rezagos 1 y 2 se salen de la banda de Bartlett, pero a partir del rezago 3, las autocorrelaciones caen y se mantienen dentro de esta banda, esto es evidencia de que la memoria de la serie se apaga rápidamente y se corta después del segundo periodo.
+
+**(b)** Para cada serie, la prueba de Ljung–Box con sus seis elementos, con $m$ elegido y justificado, y la lectura de la forma de la ACF y de la PACF. Diga con qué proceso de los estudiados en clase es compatible esa forma y con cuáles no, y por qué.
+
+Los seis elementos de la prueba de Ljung-Box para las tres series son:
+
+**1. Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \rho_1 = \rho_2 = \dots = \rho_{24} = 0 \quad \text{: la serie es ruido blanco.} \\ H_a &: \exists k \in \{1, 2, \dots, 24\} \quad \text{tal que } \rho_k \neq 0 \quad \text{: existe dependencia serial.} \end{aligned} $$ **2. Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ Q = n(n+2) \sum_{k=1}^m \frac{r_k^2}{n-k} $$ Donde: - $n$ es el número de observaciones, - $r_k$ es la autocorrelación muestral al rezago $k$, - $m$ es el número de rezagos evaluados.
+
+Bajo $H_0$, el estadístico $Q$ sigue una distribución: $$ Q \xrightarrow{d} \chi^2_{(m)} $$
+
+**3. Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff Q > \chi^2_{m, \, 0.95} $$ donde $\chi^2_{m, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**4. Valor observado del estadístico** y valor $p$
+
+- $Q_{\text{obs}}$: valor numérico del estadístico.
+
+- Valor $p = P\left(\chi^2_{m} > Q_{\text{obs}}\right)$: probabilidad de observar un valor tan extremo o más si $H_0$ fuera cierta.
+
+**5. Decision**
+
+Se compara $Q_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $Q_{\text{obs}} > \chi^2_{m, 0.95}$ o $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, no se rechaza $H_0$.
+
+**6. Lectura de la decisión en términos de la serie**
+
+Se traduce el resultado estadístico a la estructura de dependencia del fenómeno:
+
+- Si se rechaza $H_0$, existe dependencia serial, la serie no es ruido blanco, presenta estructura temporal compatible con procesos autorregresivos, de media móvil o mixtos ARMA.
+
+- Si no se rechaza $H_0$, no hay evidencia de dependencia serial, la serie se comporta como ruido blanco, no hay patrón temporal predecible.
+
+**Serie 1: Casos mensuales de EDA (transformada):**
+
+$$ w_t = (1 - B^{12}) \ln(y_t) $$
+
+- PASO 1: elección de m
+
+Se toma $m = 24$ rezagos, justificado por:
+
+- Regla del trabajo: $m = \min\!\left(\left\lfloor \frac{T}{4} \right\rfloor, 24\right) = \min(36,\, 24) = 24$.
+
+- La serie tiene período estacional $s = 12$; revisar dos ciclos completos permite detectar estructura de dependencia estacional remanente.
+
+- PASO 2: aplicar la prueba
+
+```{r}
+z <- as.numeric(na.omit(datos1$dif12_logy))   
+n <- length(z)                                
+r  <- acf_muestral(z, m = 24)
+lb <- ljung_box(r = r, T = n, m = 24, p = 0)
+lb
+```
+
+Se rechaza $H_0$ por tanto hay evidencia estadistica para sugerir que aunque se eliminó la tendencia y la estacionalidad anual, persiste estructura de dependencia remanente: las autocorrelaciones conjuntas no son nulas. El patrón sugiere que la serie transformada aún guarda memoria, por lo que un modelo autorregresivo estacional podría capturar esa dependencia y mejorar el pronóstico respecto a métodos más simples. Los valores de casos en meses anteriores siguen informando sobre los casos futuros, más allá del comportamiento anual y el crecimiento general.
+
+Como se vió en el punto anterior el comportamiento presentado en los correlogramas es la de un proceso de Media Móvil Estacional de orden 1 ($SMA(1)$). No es compatible ruido una media móvil $MA(q)$ (la ACF sería distinta de cero en los rezagos 1 a q, no solo en el 12) y un $AR(p)$ (la PACF tiene picos en 12 y 24, no se corta).
+
+**Serie 2: Afiliados activos al programa de hipertensión (transformada):**
+
+$$ w_t = (1-B)y_t $$
+
+- PASO 1: elección de m
+
+$m = \min\left(\frac{159}{4},\, 24\right) = 24$. Suficiente para capturar dependencia semanal sin exceder un cuarto de la muestra.
+
+- PASO 2: aplicar la prueba
+
+```{r}
+z <- as.numeric(na.omit(datos2$dif_y))   
+n <- length(z)                                
+r  <- acf_muestral(z, m = 24)
+lb <- ljung_box(r = r, T = n, m = 24, p = 0)
+lb
+```
+
+Como podemos observar se rechaza $H_0$ por tanto hay evidencia estadistica para sugerir que la diferencia eliminó el crecimiento, pero no convirtió la serie en ruido blanco: subsiste dependencia serial significativa (relacionado con los valores anteriores), concentrada principalmente en los primeros rezagos. Esto significa que el número de afiliados de semanas anteriores sigue siendo un buen predictor del número de afiliados de la semana siguiente. Un modelo autorregresivo de orden bajo puede aprovechar esa inercia para afinar la estimación de la demanda de medicamento.
+
+Con el gráfico expuesto en el punto anterior de la serie 2 se mencionó que un proceso compatible es una media móvil de orden 1. Un proceso incompatible es uno con proceso autorregresivo ($AR(p)$). En un autorregresivo, la PACF se cortaría y la ACF mostraría un decaimiento gradual.
+
+**Serie 3: Consultas por enfermedad respiratoria (sin transformación):**
+
+$$ w_t = y_t $$
+
+PASO 1: elección de m
+
+Se toma $m = 24$ rezagos, justificado por:
+
+- $T = 240$, \quad $m = \min\left(\frac{240}{4},\, 24\right) = \min(60,\, 24) = 24$. Cubre casi que medio año de observaciones semanales.
+
+- Suficiente para capturar dependencia semanal sin exceder un cuarto de la muestra.
+
+PASO 2: aplicar la prueba
+
+```{r}
+z <- as.numeric(na.omit(datos3$y))   
+n <- length(z)                                
+r  <- acf_muestral(z, m = 24)
+lb <- ljung_box(r = r, T = n, m = 24, p = 0)
+lb
+```
+
+Se rechaza $H_0$, esto confirma que existe dependencia serial conjunta, concentrada en los primeros dos rezagos: las consultas de una semana influyen en las de la siguiente. La estructura es de memoria corta: la influencia se apaga rápidamente, por lo que el pronóstico a corto plazo puede mejorarse aprovechando la semana inmediatamente anterior, pero la previsión a más largo plazo se aproxima a la media. No se requieren transformaciones, pero sí un modelo que recoja la dependencia de corto plazo.
+
+La serie presenta memoria corta; la ACF muestra autocorrelaciones significativas en los rezagos 1 y 2 que salen de la banda de Bartlett, y a partir del rezago 3 se corta y se mantiene dentro de las bandas, por lo que al cortarse la ACF después del segundo periodo, el patrón es compatible con un proceso de media móvil de orden 2. No es compatible con procesos de memoria larga o de tendencia (como curvas de crecimiento deterministas o caminatas aleatorias), debido a que carece de un decaimiento lento en la ACF.
+
+**(c)** Estacionariedad y ergodicidad. Para cada serie, divida la serie transformada en cuatro bloques consecutivos y compare media y varianza por bloque. Estime su media con dos errores estándar: el ingenuo $σ/\sqrt{n}$ y el que usa la varianza de largo plazo con núcleo de Bartlett, es`crito en varianza_largo_plazo(y, L)` con $L = ⌊4(n/100)^{2/9}⌋$. Construya los dos intervalos al 95%, explique por qué difieren, diga cuál es el adecuado y diga qué representa esa media en términos de la serie original.
