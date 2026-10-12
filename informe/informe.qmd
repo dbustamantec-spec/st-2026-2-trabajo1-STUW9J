@@ -130,7 +130,7 @@ Para definir el número de rezagos en cada gráfico de rezagos para las 3 series
 
 ```{r, fig.height=5}
 g1 <- graficar_serie(datos1, titulo = "Casos mensuales de enfermedad diarreica aguda notificados")
-g2 <- grafico_rezagos(datos = datos1, k = 24)
+g2 <- grafico_rezagos(datos = datos1, k = 12)
 g1 / g2 
 ```
 
@@ -273,6 +273,139 @@ ggplot(df2, aes(x = Parte_Real, y = Parte_imaginaria)) +
 
 **(c)** Para cada serie, una tabla con la varianza muestral y $r_1$ de la serie y de cada transformación candidata. Elija la transformación con la cual la serie resultante es plausiblemente estacionaria, que puede ser ninguna, y defienda que no aplica diferencias de más, con la identidad $Var(∇Y_t) = 2γ(0) − 2γ(1)$ y con lo que le ocurre a $r_1$ cuando se diferencia una serie que ya era estacionaria. Verifique sobre los datos que la media de la serie transformada coincide con lo que la transformación debe dejar.
 
+- Serie 1:
+
+```{r}
+resumen_serie <- function(x){
+  x <- na.omit(x)
+  n <- length(x)
+  if (n < 2) return(c(media=NA, varianza=NA, r1=NA))
+  media <- mean(x)
+  varianza <- var(x) * (n-1)/n
+  r1 <- cor(x[-1], x[-n])
+  return(c(media = media, varianza = varianza, r1 = r1))
+}
+
+datos1$logy <- log(datos1$y)
+datos1$dif1_logy <- c(NA, diferenciar(datos1$logy, d = 1, D = 0, s = 12))
+datos1$dif12_logy <- c(rep(NA, 12), diferenciar(datos1$logy, d = 0, D = 1, s = 12))
+datos1$dif_est_logy <- c(rep(NA, 13), diferenciar(datos1$logy, d = 1, D = 1, s = 12))
+
+datos2$dif_y <- c(NA, diferenciar(datos2$y, d = 1, D = 0, s = 1))
+datos3$dif_y <- c(NA, diferenciar(datos3$y, d = 1, D = 0, s = 1))
+```
+
+Por el inciso anterior se sabe que para la serie 1 la transformacion que se aplica es una diferencia para quitar la tendencia y una estacional para la estacionalidad, sin embargo vamos a ilustrar una tabla con cuatro escenarios, es decir, serie original comparada ante las transformaciones para esta serie, con el fin de ver el paso a paso:
+
+```{r}
+s1_ori   <- resumen_serie(datos1$y)
+s1_log   <- resumen_serie(datos1$logy)
+s1_d1    <- resumen_serie(datos1$dif1_logy)
+s1_d12 <- resumen_serie(datos1$dif12_logy)
+s1_d1d12 <- resumen_serie(datos1$dif_est_logy)
+t1 <- data.frame(
+  row.names = c("Original", "Logaritmo", "Log + Dif(1)", "Log + Dif(12)", "Log + Dif(1) + Dif(12)"),  
+  media = c(s1_ori["media"], s1_log["media"], s1_d1["media"], s1_d12["media"],  s1_d1d12["media"]),  
+  varianza  = c(s1_ori["varianza"],s1_log["varianza"],s1_d1["varianza"],s1_d12["varianza"],s1_d1d12["varianza"]),  
+  r1 = c(s1_ori["r1"], s1_log["r1"], s1_d1["r1"], s1_d12["r1"], s1_d1d12["r1"]))  
+
+round(t1, 4)
+```
+
+La diferencia estacional del logaritmo tiene $r_1$ cercano a cero y varianza muestral aproximada de 0.00370. Al agregar la diferencia ordinaria, la varianza sube a aproximadamente 0.00771 y $r_1$ cae a aproximadamente -0.558. Esta combinación de aumento de varianza y autocorrelación negativa marcada es una señal de que la diferencia ordinaria adicional puede estar sobrando. Por tanto, con la evidencia disponible, la elección preferible es $\nabla_{12}\log(Y_t)$
+
+$$\begin{aligned}
+\widehat\gamma(1)=r_1 \times \widehat\gamma(0)=(-0.0678 \times 0.0037)=-0.0002509 \\
+2\widehat\gamma(0)-2\widehat\gamma(1)
+\approx 2(0.0037)-2(-0.0002509)
+\approx 0.007902
+\end{aligned}$$
+
+La varianza muestral observada de la diferencia ordinaria adicional es aproximadamente 0.0077, cercana a ese valor teórico aproximado. Esto indica que una diferencia más duplica la varianza muestral de la serie 1, no aportando evidencia a favor de usarla.
+
+La media resultante es aproximadamente (0.0727), se interpreta como el incremento logarítmico anual promedio, no como una media que la transformación deba forzar a cero. En la escala original equivale a un crecimiento anual promedio aproximado de 7.5%.
+
+```{r}
+n <- length(datos1$logy)
+(sum(tail(datos1$logy, 12)) - sum(head(datos1$logy, 12))) / (n - 12)
+```
+
+- Serie 2:
+
+```{r}
+s2_ori  <- resumen_serie(datos2$y)
+s2_d1   <- resumen_serie(datos2$dif_y)
+
+t2 <- data.frame(
+  row.names = c("Original", "Dif(1)"),  
+  media     = c(s2_ori["media"],  s2_d1["media"]),   
+  varianza  = c(s2_ori["varianza"],s2_d1["varianza"]), 
+  r1        = c(s2_ori["r1"],      s2_d1["r1"]))       
+round(t2, 4)
+```
+
+La serie original presenta $r_1 = 0.9964$, lo que evidencia una tendencia determinista fuerte y confirma que no es estacionaria. La varianza elevada (tendencia hace que los valores se alejen de la media) y la media no estable refuerzan la necesidad de transformación. La gran reducción de varianza (de 16332 a 118) prueba que la primera diferencia era necesaria para extraer la señal de la tendencia. Una segunda diferencia no tendría tendencia que eliminar y solo introduciría ruido. En cuanto a la media, este valor no es cero, sino que representa el crecimiento promedio semanal de los afiliados, lo cual es exactamente lo que debe dejar una primera diferencia cuando la serie original crece de forma constante.
+
+PASO 1: calcular para la serie original
+
+$$\begin{align*}
+\gamma(1) &= 0.9964 \times 16332.6861 = 16273.89 \\
+\text{Var}(\nabla Y_t)_{\text{teórica}} &= 2(16332.6861) - 2(16273.89) \\
+&= 32665.37 - 32547.78 = \mathbf{117.59}
+\end{align*}$$
+
+Se observa que la varianza cae drásticamente, por lo que se confirma que la primera diferencia remueve la tendencia.
+
+PASO 2: calcular sobre la serie ya diferenciada(dif1)
+
+$$\begin{align*}
+\gamma(0) &= 117.3151, \quad r_1 = -0.4455 \\
+\gamma(1) &= -0.4455 \times 117.3151 = -52.26 \\
+\text{Var}(\nabla^2 Y_t)_{\text{teórica}} &= 2(117.3151) - 2(-52.26) \\
+&= 234.63 + 104.52 = \mathbf{339.15}
+\end{align*}$$
+
+Se observa que la varianza subiría de 117.32 a 339.15 claramente aumenta, lo cual es una señal de sobrediferenciación. Así que se para en este punto.
+
+La media no se espera que sea cero, porque la serie crece de forma casi constante. Lo que deja una primera diferencia es la pendiente promedio y la verificación confirma que ese número sale solo de los extremos de la serie.
+
+```{r}
+y <- datos2$y
+n <- length(y)
+
+media_dif <- mean(datos2$dif_y, na.rm = TRUE)
+media_teor<- (y[n] - y[1]) / (n - 1)
+
+c(observada = media_dif, teorica = media_teor)
+```
+
+- Serie 3:
+
+Ahora para la serie 3 vamos a calcular la tabla suponiendo que SI se aplicara una sola diferencia solo para hacer una comparacion y defender que no se usan diferencias en este caso.
+
+```{r}
+s3_ori <- resumen_serie(datos3$y)
+
+t3 <- data.frame(
+  row.names = c("Original", "Dif(1)"),  
+  media     = c(s3_ori["media"],  s3_d1["media"]),   
+  varianza  = c(s3_ori["varianza"],s3_d1["varianza"]), 
+  r1        = c(s3_ori["r1"],      s3_d1["r1"]))       
+
+round(t3, 4)
+```
+
+La varianza baja al diferenciar, pero eso no es evidencia a favor de diferenciar. Por la identidad, la varianza disminuye siempre que r₁ \> 0.5, y aquí r₁ = 0.7271. La identidad se cumple: $2\gamma(0) - 2\gamma(1)=2*86.63-2*(0.7271*86.63)=47.28≈(\nabla Y_t)$,pero es un chequeo algebraico, no una prueba de estacionariedad. En esta serie el criterio de varianza no sirve para detectar sobrediferenciación, así que la decisión se apoya en el diagnóstico: no hay tendencia ni estacionalidad en el gráfico, el nivel oscila alrededor de 121 y la ACF cae rápido tras el rezago 2. No hay ninguna componente determinista que una diferencia deba eliminar. Diferenciar solo destruiría el nivel, pues la media pasa de 121.14 a 0.0126, y el r₁ de 0.7271 a 0.2445.\
+
+Su media $(\bar{x} = 121.1417)$ representa el nivel promedio estable de consultas respiratorias. Si se aplicara diferencia, la media pasaría a ser ≈ 0, perdiendo toda interpretación del nivel.
+
+```{r}
+y <- datos3$y
+n <- length(y)
+c(media_dif = mean(diferenciar(y, 1, 0, 1)),
+  teorica_dif = (y[n] - y[1]) / (n - 1))
+```
+
 **(d)** A mano, en el informe. Pruebe que la función de pronóstico de Holt, $\hat{Y}_{T+h} = L_T + \hat{T}_Th$, satisface $(1 − B)^2\hat{Y}_{T+h} = 0$ para $h ≥ 3$, y que la de Holt–Winters aditivo con período $s$, $\hat{Y}_{T+h}=L_T+\hat{T}_Th+S_{T+h-s\lceil h/s \rceil}$, satisface $(1 − B)(1 − B^s)\hat{Y}_{T+h} = 0$ para $h ≥ s + 2$, con el operador actuando sobre $h$. Escriba la solución general de cada ecuación en diferencias y diga qué raíces del polinomio característico corresponden a la tendencia y cuáles a la estacionalidad.
 
 - Demostración de que $\hat{Y}_{T+h} = L_T + \hat{T}_Th$ satisface $(1 − B)^2\hat{Y}_{T+h} = 0$ para $h≥3$:
@@ -287,16 +420,20 @@ $$\begin{aligned}
 = 0
 \end{aligned}$$
 
-- Demostración de que $\hat{Y}_{T+h} = L_T + \hat{T}_Th$, satisface $(1 − B)(1 − B^s)\hat{Y}_{T+h} = 0$ para $h ≥ 3$:
+- Demostración de que $\hat{Y}_{T+h} = L_T + \hat{T}_Th+S_{T+h-s\lceil h/s \rceil}$, satisface $(1 − B)(1 − B^s)\hat{Y}_{T+h} = 0$ para $h ≥ s+2$:
 
 $$\begin{aligned}
 (1-B^s)\hat{Y}_{T+h}=\hat{Y}_{T+h}-\hat{Y}_{T+h-s} \\
-= L_T + \hat{T}_Th-L_T-\hat{T}_T(h-s) \\
-= \hat{T}_Th-\hat{T}_Th-\hat{T}_Ts = \hat{T}_Ts 
+= L_T + \hat{T}_Th + S_{T+h-s\lceil h/s \rceil}-L_T -\hat{T}_T(h-s)-S_{T+(h-s)-s\lceil (h-s)/s \rceil} \\
+= \hat{T}_Th-\hat{T}_Th+\hat{T}_Ts+ S_{T+h-s\lceil h/s \rceil} \\
+- S_{T+(h-s)-s\lceil (h-s)/s \rceil} \\
+= \hat{T}_Ts + S_{T+h-s\lceil h/s \rceil} -S_{T+(h-s)-s\lceil (h-s)/s \rceil} \\
+= \hat{T}_Ts + S_{T+h-s\lceil h/s \rceil} - S_{T+h-s\lceil h/s \rceil} \\
+= \hat{T}_Ts
 \end{aligned}$$
 
 $$\begin{aligned}
-(1-B)(1-B^s)\hat{Y}_{T+h} = (1-B)\hat{T}_Ts \\
+(1-B)(1-B^s)\hat{Y}_{T+h} = (1-B)(\hat{T}_Ts) \\
 = \hat{T}_Ts - \hat{T}_Ts \ (No \ depende  \ de \ h) \\
 = 0
 \end{aligned}$$
