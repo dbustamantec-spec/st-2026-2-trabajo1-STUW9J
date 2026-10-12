@@ -385,6 +385,7 @@ Ahora para la serie 3 vamos a calcular la tabla suponiendo que SI se aplicara un
 
 ```{r}
 s3_ori <- resumen_serie(datos3$y)
+s3_d1 <- resumen_serie(datos3$dif_y)
 
 t3 <- data.frame(
   row.names = c("Original", "Dif(1)"),  
