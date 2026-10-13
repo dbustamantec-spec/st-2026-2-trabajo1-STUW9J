@@ -3,26 +3,19 @@ pacf_dl <- function(r) {
   m <- length(r)
   if (m == 0) return(numeric(0))
   
-  # Matriz para guardar los coeficientes phi_{k, j}
   phi <- matrix(0, nrow = m, ncol = m)
-  
-  # Inicialización k = 1
   phi[1, 1] <- r[1]
   
   if (m > 1) {
     for (k in 2:m) {
-      # Calcular phi_{k, k} (el valor de la PACF en el rezago k)
       suma_num <- sum(phi[k-1, 1:(k-1)] * r[(k-1):1])
       suma_den <- sum(phi[k-1, 1:(k-1)] * r[1:(k-1)])
       
       phi[k, k] <- (r[k] - suma_num) / (1 - suma_den)
-      
-      # Actualizar los demás coeficientes phi_{k, j} de forma vectorizada
       phi[k, 1:(k-1)] <- phi[k-1, 1:(k-1)] - phi[k, k] * phi[k-1, (k-1):1]
     }
   }
   
-  # La PACF corresponde a la diagonal principal de la matriz
   return(diag(phi))
 }
 
@@ -69,4 +62,24 @@ ljung_box <- function(r, T, m, p = 0) {
     valor_critico_5 = val_critico,
     p_valor = p_val
   ))
+}
+
+# Varianza a largo plazo
+varianza_largo_plazo <- function(y, L){
+  if (anyNA(y)) stop("El vector 'y' contiene valores faltantes (NA).")
+  
+  n <- length(y)
+  media <- mean(y)
+  r <- numeric(L)
+  
+  denominador <- sum((y - media)^2)
+  for (k in 1:L) {
+    numerador <- sum((y[(k + 1):n] - media) * (y[1:(n - k)] - media))
+    r[k] <- numerador / denominador
+  }
+  
+  gamma0 <- denominador / n
+  var_lp <- gamma0 * (1 + 2 * sum((1 - (1:L)/(L + 1)) * r))
+  
+  return(var_lp)
 }

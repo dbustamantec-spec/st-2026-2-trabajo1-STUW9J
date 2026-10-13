@@ -28,6 +28,7 @@ source("../R/00-lectura.R")
 source("../R/01-graficos.R")
 source("../R/02-operadores.R")
 source("../R/03-dependencia.R")
+source("../R/04-metodos.R")
 datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
 datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
 datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
@@ -664,3 +665,178 @@ Se rechaza $H_0$, esto confirma que existe dependencia serial conjunta, concentr
 La serie presenta memoria corta; la ACF muestra autocorrelaciones significativas en los rezagos 1 y 2 que salen de la banda de Bartlett, y a partir del rezago 3 se corta y se mantiene dentro de las bandas, por lo que al cortarse la ACF después del segundo periodo, el patrón es compatible con un proceso de media móvil de orden 2. No es compatible con procesos de memoria larga o de tendencia (como curvas de crecimiento deterministas o caminatas aleatorias), debido a que carece de un decaimiento lento en la ACF.
 
 **(c)** Estacionariedad y ergodicidad. Para cada serie, divida la serie transformada en cuatro bloques consecutivos y compare media y varianza por bloque. Estime su media con dos errores estándar: el ingenuo $σ/\sqrt{n}$ y el que usa la varianza de largo plazo con núcleo de Bartlett, es`crito en varianza_largo_plazo(y, L)` con $L = ⌊4(n/100)^{2/9}⌋$. Construya los dos intervalos al 95%, explique por qué difieren, diga cuál es el adecuado y diga qué representa esa media en términos de la serie original.
+
+```{r}
+calcular_L <- function(n) {
+  floor(4 * (n / 100)^(2/9))
+}
+w1 <- na.omit(datos1$dif12_logy)
+w2 <- na.omit(datos2$dif_y)
+w3 <- na.omit(datos3$y)
+
+n1 <- length(w1)   # Serie 1: EDA transformada
+n2 <- length(w2)   # Serie 2: Hipertensión transformada
+n3 <- length(w3)   # Serie 3: Respiratoria (sin transformación)
+
+L1 <- calcular_L(n1)
+L2 <- calcular_L(n2)
+L3 <- calcular_L(n3)
+
+
+dividir_bloques <- function(y, num_bloques = 4) {
+
+  n <- length(y)
+  tam_bloque <- floor(n / num_bloques)
+  bloques <- list()
+  for (i in 1:num_bloques) {
+    desde <- (i - 1) * tam_bloque + 1
+    hasta <- min(i * tam_bloque, n)
+    bloques[[i]] <- y[desde:hasta]
+  }
+  
+  return(bloques)
+}
+```
+
+```{r}
+bloques1 <- dividir_bloques(w1)
+bloques2 <- dividir_bloques(w2)
+bloques3 <- dividir_bloques(w3)
+
+resumen_bloques <- function(bloques) {
+  medias <- sapply(bloques, mean)
+  varianzas <- sapply(bloques, var)
+  data.frame(
+    Bloque = paste0("Bloque ", 1:4),
+    Media = round(medias, 5),   
+    Varianza = round(varianzas, 5))
+}
+
+rb1 <- resumen_bloques(bloques1)
+rb2 <- resumen_bloques(bloques2)
+rb3 <- resumen_bloques(bloques3)
+
+vlp1 <- varianza_largo_plazo(w1, L1)
+vlp2 <- varianza_largo_plazo(w2, L2)
+vlp3 <- varianza_largo_plazo(w3, L3)
+```
+
+```{r}
+# Fórmula: media ± 1.96 * sqrt(varianza / n)
+intervalo_ingenuo <- function(y) {
+  n <- length(y)
+  media <- mean(y)
+  error_estandar <- sqrt(var(y) / n)
+
+  limite_inferior <- media - 1.96 * error_estandar
+  limite_superior <- media + 1.96 * error_estandar
+  
+  list(
+    media = media,
+    error_ingenuo = error_estandar,
+    inf = limite_inferior,
+    sup = limite_superior)
+}
+
+
+intervalo_largo_plazo <- function(y, L) {
+  n <- length(y)
+  media <- mean(y)
+  vlp <- varianza_largo_plazo(y, L)
+  error_ajustado <- sqrt(vlp / n)
+  limite_inferior <- media - 1.96 * error_ajustado
+  limite_superior <- media + 1.96 * error_ajustado
+  list(
+    media = media,
+    vlp = vlp,
+    error_lp = error_ajustado,
+    inf = limite_inferior,
+    sup = limite_superior)
+}
+
+ing1 <- intervalo_ingenuo(w1)   # Ingenuo — Serie 1
+lp1  <- intervalo_largo_plazo(w1, L1)   # Largo plazo — Serie 1
+
+ing2 <- intervalo_ingenuo(w2)   # Ingenuo — Serie 2
+lp2  <- intervalo_largo_plazo(w2, L2)   # Largo plazo — Serie 2
+
+ing3 <- intervalo_ingenuo(w3)   # Ingenuo — Serie 3
+lp3  <- intervalo_largo_plazo(w3, L3)   # Largo plazo — Serie 3
+```
+
+**Serie 1 — EDA transformada:** $w_t = (1-B^{12})\ln (y_t)$
+
+**Bloques consecutivos**
+
+```{r}
+rb1
+```
+
+Observamos que las medias por bloque son cercanas a cero y las varianzas no presentan cambios bruscos ni muy diferentes entre sí, por lo cual hay evidencia compatible con estacionariedad tras la transformación o en otras palabras todos los bloques se parecen. La serie se comporta igual desde el inicio hasta el final, es ergódica
+
+**Serie 2: Afiliados activos al programa de hipertensión (transformada):** $w_t = (1-B)y_t$
+
+**Bloques consecutivos**
+
+```{r}
+rb2
+```
+
+Las medias son similares en cada bloque, aunque parecen haber diferencias a considerar, sin embargo estas se san debido a que las varianzas crecen de forma marcada y progresiva. Esto nos indica que, aunque la media se estabilizó, la variabilidad aumenta con el tiempo: los cambios en el número de afiliados son más irregulares y de mayor magnitud en los periodos recientes. La serie es estacionaria en media, pero no en cuanto a la varianza. Pensando en un futuro al modelar, la dependencia de media se puede capturar con un modelo autorregresivo, pero la volatilidad creciente debe tenerse presente al interpretar los intervalos de pronóstico. La media sí es ergódica, aunque la varianza podría no serlo del todo por la inestabilidad. La estimación de la media es confiable, pero la dispersión debe interpretarse con cautela.
+
+**Serie 3 — Respiratoria (sin transformación):** $w_t = y_t$
+
+**Bloques consecutivos**
+
+```{r}
+rb3
+```
+
+Las medias de los cuatro bloques son bien parecidas entre sí, sin diferencias importantes ni con una clara tendencia a subir o bajar a lo largo de la muestra. Lo mismo podemos ver en cuanto a las varianzas, pues se mantienen en un rango diriamos que estrecho, sin saltos ni tendencia creciente o decreciente pronunciada. Entonces con esto podemos hablar de que la serie es ergodica, la media de consultas que se calculó representa fielmente el nivel estable del fenómeno. Esto da de cuenta que la serie original ya es estacionaria por naturaleza: no presenta tendencia, estacionalidad ni cambios de dispersión, por lo que no requiere de ninuguna transformación previa.La estructura de dependencia detectada (memoria corta, solo los primeros rezagos) es la única dinámica que queda por modelar, sin necesidad de diferencias ni ajustes de escala.
+
+**Tablas de intervalos de confianza al 95 % - Ingenuo vs Varianza de Largo Plazo**
+
+**1. Intervalo ingenuo — Fórmula**
+
+$$ \bar{y} \pm 1.96 \cdot \sqrt{\frac{\widehat{\sigma}^2}{n}} $$ **2. Intervalo de largo plazo — Fórmula**
+
+$$ \bar{y} \pm 1.96 \cdot \sqrt{\frac{\text{VLP}}{n}} $$
+
+Donde la Varianza de Largo Plazo (VLP) con núcleo de Bartlett se calcula como:
+
+$$ \text{VLP} = \widehat{\sigma}^2 \cdot \left[ 1 + 2 \sum_{k=1}^L \left(1 - \frac{k}{L}\right) r_k \right] $$
+
+Ya con esa especificacion vamos con los intervalos de una vez
+
+```{r}
+tabla_ic <- function(ing, lp, titulo) {
+  tabla <- data.frame(
+    `Método` = c(
+      "Ingenuo",
+      "Varianza Largo plazo"),
+    `Error estándar` = c(
+      round(ing$error_ingenuo, 5),
+      round(lp$error_lp, 5)),
+    `Límite inferior` = c(
+      round(ing$inf, 5),
+      round(lp$inf, 5)),
+    `Límite superior` = c(
+      round(ing$sup, 5),
+      round(lp$sup, 5)),
+    check.names = FALSE)
+
+  return(tabla)
+}
+
+tabla_ic(ing1, lp1, "Intervalos al 95 % — Serie 1 (EDA)")
+tabla_ic(ing2, lp2, "Intervalos al 95 % — Serie 2 (Hipertensión)")
+tabla_ic(ing3, lp3, "Intervalos al 95 % — Serie 3 (Respiratoria)")
+```
+
+Para la serie 1 se tiene que la cercanía entre ambos errores estándar muestra que la transformación ($\nabla_{12}\ln(y_t)$) logró limpiar casi toda la dependencia que afectaba la estimación del nivel. Ambos intervalos contienen valores muy cercanos a cero confirmando que no queda un desplazamiento permanente en el nivel.
+
+En cuanto a la serie 2, el método ingenuo sobreestima la incertidumbre. Esto ocurre porque la serie ya diferenciada tiene autocorrelación fuertemente negativa . Cuando hay dependencia negativa, los cambios se compensan entre sí (a un valor alto le sigue uno bajo), haciendo que la media de la muestra converja más rápido a la media real. El método ingenuo ignora esta compensación natural, asume independencia y, por tanto, entrega un intervalo más amplio.
+
+Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$), la dependencia temporal positiva significa que los datos consecutivos se parecen mucho, por lo que cada nueva observación aporta menos información que si fuera un dato 100% independiente. El método ingenuo asume que cada dato aporta información nueva completa y, al hacerlo, subestima la verdadera incertidumbre. El intervalo de largo plazo es el único adecuado porque detecta esta redundancia de información y ensancha el intervalo para reflejar correctamente la variabilidad real.
+
+## Pronóstico y evaluación
