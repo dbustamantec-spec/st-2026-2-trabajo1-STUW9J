@@ -420,6 +420,19 @@ ajustar_tendencia_estacional <- function(y, s) {
   s
 }
 
+.stop_hw_mult_inestable <- function() {
+  stop(structure(
+    list(
+      message = paste(
+        "La combinacion de alpha, beta y gamma hizo que el nivel",
+        "o el indice estacional multiplicativo dejara de ser positivo."
+      ),
+      call = NULL
+    ),
+    class = c("hw_mult_inestable", "error", "condition")
+  ))
+}
+
 .inicializar_holt_winters <- function(y, s, multiplicativo) {
   media_1 <- mean(y[seq_len(s)])
   media_2 <- mean(y[s + seq_len(s)])
@@ -510,11 +523,13 @@ ajustar_hw_mult <- function(y, s, alpha, beta, gamma) {
         (1 - alpha) * (nivel[t - 1L] + tendencia[t - 1L])
       tendencia[t] <- beta * (nivel[t] - nivel[t - 1L]) +
         (1 - beta) * tendencia[t - 1L]
+      if (!is.finite(nivel[t]) || nivel[t] <= 0) {
+        .stop_hw_mult_inestable()
+      }
       estacional[t] <- gamma * (y[t] / nivel[t]) +
         (1 - gamma) * est_ant
       if (!is.finite(estacional[t]) || estacional[t] <= 0) {
-        stop("La actualizacion produjo un indice estacional no positivo.",
-             call. = FALSE)
+        .stop_hw_mult_inestable()
       }
     }
   }
@@ -572,4 +587,3 @@ ajustar_hw_mult <- function(y, s, alpha, beta, gamma) {
   }
   stop("metodo no implementado en optimizar().", call. = FALSE)
 }
-

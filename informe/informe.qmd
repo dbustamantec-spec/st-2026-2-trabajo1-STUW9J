@@ -29,6 +29,7 @@ source("../R/01-graficos.R")
 source("../R/02-operadores.R")
 source("../R/03-dependencia.R")
 source("../R/04-metodos.R")
+source("../R/05-evaluacion.R")
 datos1 <- leer_serie(x = "../datos/STUW9J-serie-1.csv", unidad = "casos", fuente = "")
 datos2 <- leer_serie(x = "../datos/STUW9J-serie-2.csv", unidad = "afiliados", fuente = "")
 datos3 <- leer_serie(x = "../datos/STUW9J-serie-3.csv", unidad = "consultas", fuente = "")
@@ -840,3 +841,58 @@ En cuanto a la serie 2, el método ingenuo sobreestima la incertidumbre. Esto oc
 Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$), la dependencia temporal positiva significa que los datos consecutivos se parecen mucho, por lo que cada nueva observación aporta menos información que si fuera un dato 100% independiente. El método ingenuo asume que cada dato aporta información nueva completa y, al hacerlo, subestima la verdadera incertidumbre. El intervalo de largo plazo es el único adecuado porque detecta esta redundancia de información y ensancha el intervalo para reflejar correctamente la variabilidad real.
 
 ## Pronóstico y evaluación
+
+**(a)** Métodos y asignación. Cada método del catálogo funciona en su propia función, con las
+convenciones de inicialización de las notas, se verifica en un ejemplo pequeño a mano o contra
+una cifra de las notas, y se aplica al menos a una de las tres series. En cada serie se aplican
+todos los métodos cuyo supuesto sostiene el diagnóstico de las secciones 3 a 5, y además al
+menos uno cuyo supuesto ese diagnóstico contradice, que sirve de contraste. Una tabla dice,
+para cada método y cada serie, si se aplicó y con qué evidencia se decidió
+
+**Aplicación de los métodos por serie:**
+
+"\*" indica el método de contraejemplo, es decir, uno no indicado para la serie correspondiente.
+
+| Método                                     | Serie 1 | Serie 2 | Serie 3 |
+|--------------------------------------------|---------|---------|---------|
+| Media simple                               | No      | Sí\*    | Sí      |
+| Ingenuo                                    | No      | Sí      | Sí      |
+| Ingenuo estacional                         | Sí      | No      | No      |
+| Media móvil                                | No      | No      | Sí      |
+| Suavizamiento exponencial simple           | No      | No      | Sí      |
+| Doble media móvil                          | No      | Sí      | No      |
+| Tendencia lineal, cuadrática y exponencial | Sí\*    | Sí      | No      |
+| Tendencia con ficticias de suma cero       | Sí      | No      | Sí\*    |
+| Holt                                       | No      | Sí      | No      |
+| Holt Winters aditivo                       | Sí      | No      | No      |
+| Holt Winter multiplicativo                 | Sí      | No      | No      |
+
+- Serie 1: Esta serie es de tipo IV, tiene estacionalidad y tendencia. Las metodologías adecuadas para este tipo de comportamiento son: Holt-aditivo, Holt-multiplicativo, tendencia con ficticias. Ya se motró que sería más apropiado un Holt-multiplicativo que uno aditivo, pero a modo de comparación se presentan los dos. Además, se usa un referente ingenuo, en este caso el estacional, pues la serie presenta estacionalidad. Como contrajemplo se muestra tambien el método de tendencia lineal, que se usa cuando solo hay tendencia.
+
+- Serie 2: Hay presencia de una serie tipo II, solo tendencia. Los métodos que se usan para estos casos son doble media móvil, tendencias, Holt y referente ingenuo para tener un punto de comparación inicial. Como contraejemplo se propone una media simple, que se usa cuando la serie es estacionaria.
+
+- Serie 3: La serie 3 es estacionaria, por lo que las metricas indicados son media simple, media móvil, suavizamiento exponencial simple y referente ingenuo para comparar. Como contraejemplo se usa tendencia con ficticias, el cual es usado cuando la serie presenta estacionalidad y tendencia.
+
+```{r}
+# Holt-multiplicativo
+n0_1 <- floor(0.8 * length(datos1$y))
+
+opt_hw_mult_s1 <- optimizar(
+  y = datos1$y[seq_len(n0_1)],
+  metodo = "hw_mult",
+  s = 12
+)
+
+opt_hw_mult_s1$optimo
+
+serie1_hw_mul <- ajustar_hw_mult(y = datos1$y[seq_len(n0_1)],
+                                 s = 12, alpha = 0.1,
+                                 beta = 0.1, gamma = 0.3)
+
+# Hold-aditivo
+
+```
+
+- Serie 2:
+
+- Serie 3:
