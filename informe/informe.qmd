@@ -857,8 +857,8 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 | Suavizamiento exponencial simple           | No      | No      | Sí      |
 | Doble media móvil                          | No      | Sí      | No      |
 | Tendencia lineal, cuadrática y exponencial | Sí\*    | Sí      | No      |
-| Tendencia con ficticias de suma cero       | Sí      | No      | Sí\*    |
-| Holt                                       | No      | Sí      | No      |
+| Tendencia con ficticias de suma cero       | Sí      | No      | No      |
+| Holt                                       | No      | Sí      | Sí\*    |
 | Holt Winters aditivo                       | Sí      | No      | No      |
 | Holt Winter multiplicativo                 | Sí      | No      | No      |
 
@@ -866,7 +866,7 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 
 - Serie 2: Hay presencia de una serie tipo II, solo tendencia. Los métodos que se usan para estos casos son doble media móvil, tendencias, Holt y referente ingenuo para tener un punto de comparación inicial. Como contraejemplo se propone una media simple, que se usa cuando la serie es estacionaria.
 
-- Serie 3: La serie 3 es estacionaria, por lo que las metricas indicados son media simple, media móvil, suavizamiento exponencial simple y referente ingenuo para comparar. Como contraejemplo se usa tendencia con ficticias, el cual es usado cuando la serie presenta estacionalidad y tendencia.
+- Serie 3: La serie 3 es estacionaria, por lo que las metricas indicados son media simple, media móvil, suavizamiento exponencial simple y referente ingenuo para comparar. Como contraejemplo se usa el método de Holt, el cual es usado cuando la serie presenta tendencia.
 
 **(b)** Regresiones. Para cada tendencia ajustada por mínimos cuadrados, con o sin ficticias: tabla de coeficientes con error estándar ordinario y robusto a autocorrelación con núcleo de Bartlett, pruebas t con el robusto, y revisión de supuestos sobre los residuos, con correlograma, Ljung–Box referido a $\chi^2_{(m)}$, porque los coeficientes de regresores deterministas no restan grados de libertad, Jarque–Bera, y el estadístico de Durbin–Watson como diagnóstico, leído con $d ≈ 2(1 − r_1)$.
 
@@ -1270,7 +1270,7 @@ tabla_pruebas(res_serie3, "Pruebas diagnóstico — Serie 3")
 
 ```{r}
 generar_tabla_origen_movil <- function(y, lista_metodos, 
-                                       h, n0, titulo){
+                                       h, n0){
   resultados <- list()
   
   for (nombre in names(lista_metodos)) {
@@ -1341,6 +1341,12 @@ opt_mm_s3 <- optimizar(
   y = datos3$y[seq_len(n0_3)], metodo = "mm" 
 )
 opt_mm_s3$optimo
+
+# Holt serie 3
+opt_holt_s3 <- optimizar(
+  y = datos3$y[seq_len(n0_3)], metodo = "holt" 
+)
+opt_holt_s3$optimo
 ```
 
 ```{r}
@@ -1354,15 +1360,13 @@ metodos_s1 <- list(
   "Tendencia Lineal (Contraste)" = function(y) ajustar_tendencia(y, tipo = "lineal"),
   "Tendencia Ficticias" = function(y) ajustar_tendencia_estacional(y, s = 12),
   # Reemplaza con los parámetros que sacaste de optimizar()
-  "Holt-Winters Aditivo" = function(y) ajustar_hw(y, s = 12, alpha = 0.1, beta = 0.1, gamma = 0.7),
-  "Holt-Winters Multiplicativo" = function(y) ajustar_hw_mult(y, s = 12, alpha = 0.1, beta = 0.1, gamma = 0.3)
+  "Holt-Winters Aditivo" = function(y) ajustar_hw(y, s = 12, alpha = opt_hw_ad_s1$optimo$alpha, beta = opt_hw_ad_s1$optimo$beta,
+                                                  gamma = opt_hw_ad_s1$optimo$gamma),
+  "Holt-Winters Multiplicativo" = function(y) ajustar_hw_mult(y, s = 12, alpha = opt_hw_mult_s1$optimo$alpha, beta = opt_hw_mult_s1$optimo$beta,
+                                                              gamma = opt_hw_mult_s1$optimo$gamma)
 )
 
-generar_tabla_origen_movil(datos1$y, metodos_s1, h = 1, n0 = n0_1, "Serie 1: Evaluación Origen Móvil")
-generar_tabla_origen_movil(datos1$y, metodos_s1, h = 12, n0 = n0_1, "Serie 1: Evaluación Origen Móvil")
-
-
-# --- SERIE 2: Hipertensión (h=1 y h=6) ---
+# SERIE 2: Hipertensión (h=1 y h=6)
 # Justificación del referente: Ingenuo simple, dado que la serie presenta 
 # una tendencia creciente sin patrón estacional visible.
 n0_2 <- floor(0.8 * length(datos2$y))
@@ -1373,41 +1377,455 @@ metodos_s2 <- list(
   "Tendencia Lineal" = function(y) ajustar_tendencia(y, tipo = "lineal"),
   "Tendencia Cuadrática" = function(y) ajustar_tendencia(y, tipo = "cuadratica"),
   "Tendencia Exponencial" = function(y) ajustar_tendencia(y, tipo = "exponencial"),
-  # Reemplaza k, alpha y beta con tus valores óptimos
-  "Doble Media Móvil" = function(y) ajustar_dmm(y, k = 4),
-  "Holt" = function(y) ajustar_holt(y, alpha = 0.15, beta = 0.1)
+  "Doble Media Móvil" = function(y) ajustar_dmm(y, k = opt_dmm_s2$optimo$k),
+  "Holt" = function(y) ajustar_holt(y, alpha = opt_holt_s2$optimo$alpha, beta = opt_holt_s2$optimo$beta)
 )
 
-generar_tabla_origen_movil(datos2$y, metodos_s2, h = 1, n0 = n0_2, "Serie 2: Evaluación Origen Móvil")
-generar_tabla_origen_movil(datos2$y, metodos_s2, h = 6, n0 = n0_2, "Serie 2: Evaluación Origen Móvil")
-
-
-# --- SERIE 3: Respiratoria (h=1 y h=6) ---
+# SERIE 3: Respiratoria (h=1 y h=6)
 # Justificación del referente: Ingenuo simple, ya que la serie es estacionaria 
 # y no posee componentes estacionales deterministas.
 n0_3 <- floor(0.8 * length(datos3$y))
 
 metodos_s3 <- list(
   "Ingenuo (Referente)" = function(y) ajustar_ingenuo(y),
-  "Tendencia Ficticias (Contraste)" = function(y) ajustar_tendencia_estacional(y, s = 4), # s=4 por asumir mes
+  "Holt (Contraste)" = function(y) ajustar_holt(y, alpha = opt_holt_s3$optimo$alpha,
+                                    beta = opt_holt_s3$optimo$beta), 
   "Media Simple" = function(y) ajustar_media(y),
-  # Reemplaza k y alpha con tus valores óptimos
-  "Media Móvil" = function(y) ajustar_mm(y, k = 2),
-  "Suavizamiento Exponencial Simple" = function(y) ajustar_ses(y, alpha = 0.98)
+  "Media Móvil" = function(y) ajustar_mm(y, k = opt_mm_s3$optimo$k),
+  "Suavizamiento Exponencial Simple" = function(y) ajustar_ses(y, alpha = opt_se_s3$optimo$alpha)
 )
-
-generar_tabla_origen_movil(datos3$y, metodos_s3, h = 1, n0 = n0_3, "Serie 3: Evaluación Origen Móvil")
-generar_tabla_origen_movil(datos3$y, metodos_s3, h = 6, n0 = n0_3, "Serie 3: Evaluación Origen Móvil")
 ```
+
+Tabla para la serie 1 con $h=1$
 
 ```{r}
-
+generar_tabla_origen_movil(datos1$y, metodos_s1, h = 1, n0 = n0_1)
 ```
 
-- Serie 2:
-
-- Serie 3:
+Tabla para la serie 1 con $h=12$
 
 ```{r}
+generar_tabla_origen_movil(datos1$y, metodos_s1, h = 12, n0 = n0_1)
+```
+
+Tabla para la serie 2 con $h=1$
+
+```{r}
+generar_tabla_origen_movil(datos2$y, metodos_s2, h = 1, n0 = n0_2)
+```
+
+Tabla para la serie 2 con $h=6$
+
+```{r}
+generar_tabla_origen_movil(datos2$y, metodos_s2, h = 6, n0 = n0_2)
+```
+
+Tabla para la serie 3 con $h=1$
+
+```{r}
+generar_tabla_origen_movil(datos3$y, metodos_s3, h = 1, n0 = n0_3)
+```
+
+Tabla para la serie 3 con $h=6$
+
+```{r}
+generar_tabla_origen_movil(datos3$y, metodos_s3, h = 6, n0 = n0_3)
+```
+
+**(d)** Validación del ganador. Para el ganador de cada serie en $h = 1$, sobre sus errores de origen móvil a un paso: gráfico de los errores en el tiempo, su correlograma con la banda calculada sobre el número de errores, prueba t de media cero, Ljung–Box referido a $\chi^2_{(m)}$ y Jarque–Bera, todas con sus seis elementos, y el estadístico de Durbin–Watson con su lectura. Si queda autocorrelación, diga en qué rezagos y qué estructura de la serie el método no está capturando.
+
+```{r}
+errores_ganador <- function(y, metodo_ganador, n0) {
+  eval <- origen_movil(y = y, metodo = metodo_ganador, h = 1, n0 = n0)
+  data.frame(
+    t = (n0 + 1):length(y),
+    real = eval$reales,
+    pronostico = eval$predicciones,
+    error = eval$reales - eval$predicciones
+  )
+}
+
+validar_ganador <- function(errores, titulo) {
+  e <- errores$error
+  n <- length(e)
+  t_media <- t.test(e, mu = 0)
+
+  m <- min(24L, floor(n / 4))
+  r <- acf_muestral(e, m = m)
+  Q <- ljung_box(r, T = n, m = m)
+  banda <- 1.96 / sqrt(n)
+
+  dw <- sum(diff(e)^2) / sum(e^2)
+  centrados <- e - mean(e)
+  momento_2 <- mean(centrados^2)
+  asimetria <- mean(centrados^3) / momento_2^(3 / 2)
+  curtosis <- mean(centrados^4) / momento_2^2
+  jb <- n * (asimetria^2 / 6 + (curtosis - 3)^2 / 24)
+  p_jb <- pchisq(jb, df = 2, lower.tail = FALSE)
+
+  gl_t <- unname(t_media$parameter)
+  critico_t <- qt(0.975, df = gl_t)
+  critico_jb <- qchisq(0.95, df = 2)
+
+  tabla_validacion <- data.frame(
+    Prueba = c(
+      "t de media cero",
+      paste0("Ljung–Box ($Q$, $m=", m, ")"),
+      "Durbin–Watson ($d$)",
+      "Jarque–Bera ($JB$)"
+    ),
+    `Grados de libertad` = c(
+      as.character(gl_t),
+      as.character(Q$grados_libertad),
+      "No aplica",
+      "2"
+    ),
+    Estadístico = c(
+      round(t_media$statistic, 4),
+      round(Q$estadistico, 4),
+      round(dw, 4),
+      round(jb, 4)
+    ),
+    `Valor crítico (5%)` = c(
+      paste0("±", round(critico_t, 4)),
+      round(Q$valor_critico_5, 4),
+      "Referencia: 2",
+      round(critico_jb, 4)
+    ),
+    `Valor p` = c(
+      round(t_media$p.value, 4),
+      round(Q$p_valor, 4),
+      "No aplica",
+      round(p_jb, 4)
+    ),
+    Decisión = c(
+      ifelse(t_media$p.value < 0.05, "Rechazar H₀", "No rechazar H₀"),
+      ifelse(Q$p_valor < 0.05, "Rechazar H₀: autocorrelación conjunta",
+             "No rechazar H₀"),
+      ifelse(dw < 2, "Menor que 2: indicio de autocorrelación positiva",
+             ifelse(dw > 2, "Mayor que 2: indicio de autocorrelación negativa",
+                    "Igual a 2: sin indicio de autocorrelación de orden 1")),
+      ifelse(p_jb < 0.05, "Rechazar H₀", "No rechazar H₀")
+    )
+  )
+
+  list(
+    tabla = tabla_validacion,
+    errores = e,
+    media = mean(e),
+    desv_est = sd(e),
+    acf = r,
+    banda = banda,
+    m = m,
+    dw = dw,
+    t_p = t_media$p.value,
+    lb_p = Q$p_valor,
+    jb_p = p_jb
+  )
+}
+
+
+
+alpha_s1 <- opt_hw_mult_s1$optimo$alpha
+beta_s1  <- opt_hw_mult_s1$optimo$beta
+gamma_s1 <- opt_hw_mult_s1$optimo$gamma
+
+ganador_s1 <- function(y) {
+  ajustar_hw_mult(y, 
+             s = 12,
+             alpha = alpha_s1,
+             beta  = beta_s1,
+             gamma = gamma_s1)
+}
+
+ganador_s2 <- function(y) {
+  ajustar_tendencia(y,
+               tipo = "cuadratica")
+}
+
+
+ganador_s3 <- function(y) {
+  ajustar_ingenuo(y)
+}
+
+err_s1 <- errores_ganador(datos1$y, ganador_s1, n0 = n0_1)
+val_s1 <- validar_ganador(err_s1, "Validación — Serie 1")
+
+err_s2 <- errores_ganador(datos2$y, ganador_s2, n0 = n0_2)
+val_s2 <- validar_ganador(err_s2, "Validación — Serie 2")
+
+err_s3 <- errores_ganador(datos3$y, ganador_s3, n0 = n0_3)
+val_s3 <- validar_ganador(err_s3, "Validación — Serie 3")
+
+
+mostrar_tabla <- function(resultado, titulo) {
+  cat("###", titulo, "\n\n")
+  print(resultado$tabla, row.names = FALSE)
+  cat("\n")
+}
+```
+
+### Elementos de las pruebas diagnósticas
+
+**1.Prueba t de media cero**
+
+**1.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \mu = 0 \quad \text{: la media de los residuos es cero.} \\ H_a &: \mu \neq 0 \quad \text{: la media de los residuos difiere de cero.} \end{aligned} $$
+
+**1.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ T = \frac{\bar{e}}{s/\sqrt{n}} $$ Donde $\bar{e}$ es la media de los residuos. Bajo $H_0$ , el estadistico de prueba sigue la distribución t de Student con n-1 grados de libertad.
+
+**1.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff |T| > t_{n-1,\, 0.975} $$. si el valor absoluto del estadístico excede el valor crítico, se rechaza la hipótesis nula de media cero.
+
+**1.4 Valor observado del estadístico** y valor $p$
+
+- $T_{\text{obs}}$: valor numérico del estadístico que se calcula directamente con los residuos del modelo
+
+- Valor $p = P\big(|T| > |t_{\text{obs}}|\big)$ Donde $T \sim t_{n-1}$. Es la probabilidad de observar un valor tan extremo o más extremo que el obtenido, bajo la hipótesis nula de media cero.
+
+**1.5 Decision**
+
+Se compara $T_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $T_{\text{obs}} > t_{n-1, 0.975}$ o bien con si el valor $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, pues no se rechaza $H_0$.
+
+**1.6 Lectura de la decisión en términos de la serie**
+
+- Si no se rechaza $H_0$, la media de los residuos es compatible con cero. El modelo no presenta sesgo sistemático; si se rechaza el modelo presenta un sesgo persistente; predice sistemáticamente por encima o por debajo del valor real, lo que indica que la forma de tendencia elegida no capta completamente el comportamiento de nivel de la serie.
+
+**2. Prueba de Ljung-Box**
+
+**2.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \rho_1 = \rho_2 = \dots = \rho_{24} = 0 \quad \text{: la serie es ruido blanco.} \\ H_a &: \exists k \in \{1, 2, \dots, 24\} \quad \text{tal que } \rho_k \neq 0 \quad \text{: existe dependencia serial.} \end{aligned} $$ **2.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ Q = n(n+2) \sum_{k=1}^m \frac{r_k^2}{n-k} $$ Donde: - $n$ es el número de observaciones, - $r_k$ es la autocorrelación muestral al rezago $k$, - $m$ es el número de rezagos evaluados.
+
+Bajo $H_0$, el estadístico $Q$ sigue una distribución: $$ Q \xrightarrow{d} \chi^2_{(m)} $$
+
+**2.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff Q > \chi^2_{m, \, 0.95} $$ donde $\chi^2_{m, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**2.4 Valor observado del estadístico** y valor $p$
+
+- $Q_{\text{obs}}$: valor numérico del estadístico.
+
+- Valor $p = P\left(\chi^2_{m} > Q_{\text{obs}}\right)$: probabilidad de observar un valor tan extremo o más si $H_0$ fuera cierta.
+
+**2.5 Decision**
+
+Se compara $Q_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $Q_{\text{obs}} > \chi^2_{m, 0.95}$ o $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, no se rechaza $H_0$.
+
+**2.6 Lectura de la decisión en términos de la serie**
+
+Se traduce el resultado estadístico a la estructura de dependencia del fenómeno:
+
+- Si se rechaza $H_0$, existe dependencia serial, la serie no es ruido blanco.
+
+**3.Prueba de Durbin–Watson**
+
+Detectar autocorrelación de primer orden en los residuos del modelo: ¿el error de hoy está relacionado con el error de ayer?
+
+**3.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \rho = 0 \quad \text{: no hay correlación entre el residuo actual y el inmediatamente anterior.} \\ H_a &: \rho = 0 \quad \text{: existe autocorrelación de primer orden (puede ser positiva o negativa).} \end{aligned} $$ **3.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ d = \displaystyle \frac{\sum_{t=2}^n (e_t - e_{t-1})^2}{\sum_{t=1}^n e_t^2} \approx 2(1 - r_1)$$ Donde: -$e_t$ ya se habia definido -$r_1$ es la autocorrelación muestral de primer orden de los residuos.
+
+Bajo $H_0$, el estadístico $d$ sigue una referencia de valor bajo $d \approx 2$.
+
+**3.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff Q > \chi^2_{m, \, 0.95} $$ donde $\chi^2_{m, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**3.4 Valor observado del estadístico**
+
+- $d_{\text{obs}}$: valor numérico del estadístico.
+
+**3.5 Decision**
+
+Se compara $d_{\text{obs}}$ con el valor crítico o el valor de referencia, ie. $d \approx 2$.
+
+- Si $d_{\text{obs}} << 2$ o $d_{\text{obs}}$ \<\< 2 , se rechaza $H_0$, ie. si el valor observado difiere mucho del valor de referencia igual a 2.
+
+- En caso contrario, ie. si \$d\_{\text{obs}}\approx 2 \$ o es muy cercano a ese 2, entonces no se rechaza $H_0$.
+
+**3.6 Lectura de la decisión en términos de la serie**
+
+- Si se rechaza $H_0$, hay autocorrelación positiva; los errores se parecen entre sí, quedando estructura por modelar o tambien puede haber autocorrelación negativa, ie. los errores se alternan sistemáticamente.
+
+**4. Prueba de Jarque–Bera**
+
+Esta es con el fin de verificar si los residuos del modelo siguen una distribución normal. Comprobar que los errores no presentan asimetría ni curtosis excesiva.
+
+**4.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \text{los residuos siguen una distribucion normal, ie. asimetría = 0  y curtosis =3 } \\ H_a &:  \text{La distribución de los residuos no es normal:} \end{aligned} $$ **4.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$JB = n \left( \frac{S^2}{6} + \frac{(K-3)^2}{24} \right) $$ Donde: - $S$ es la asimetría muestral de los residuos, - $K$ es la curtosis muestral de los residuos y - $n$ es el número de residuos.
+
+Bajo $H_0$, el estadístico de prueba $JB$ sigue una distribución chi-cuadrado con 2 grados de libertad, ie: $$ JB \xrightarrow{d} \chi^2_{(2)} $$
+
+**4.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff JB > \chi^2_{2, \, 0.95} $$ donde $\chi^2_{2, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**4.4 Valor observado del estadístico** y valor $p$
+
+- $JB_{\text{obs}}$: valor numérico del estadístico.
+
+- Valor $p = P\left(\chi^2_{m} > Q_{\text{obs}}\right)$: probabilidad de observar un valor tan extremo o más si $H_0$ fuera cierta.
+
+**4.5 Decision**
+
+Se compara $JB_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $JB_{\text{obs}} > \chi^2_{2, 0.95}$ o $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, acepatamos $H_0$.
+
+**4.6 Lectura de la decisión en términos de la serie**
+
+Se traduce el resultado estadístico a la estructura de residuos del fenómeno:
+
+- Si se rechaza $H_0$, los residuos no se distribuyen normalmente; puede haber valores extremos o asimetría que afecta la precisión de los pronósticos. De lo contrario los residuos son compatibles con normalidad; los intervalos de confianza basados en esta suposición son fiables.
+
+**GRÁFICOS DE ERRORES EN EL TIEMPO + ACF**
+
+```{r}
+graficar_errores_tiempo <- function(datos, titulo) {
+  ggplot(datos, aes(x = t, y = error)) +
+    geom_line(color = "steelblue", linewidth = 0.6) +
+    geom_hline(yintercept = 0, color = "red", linetype = "dashed", linewidth = 0.8) +
+    labs(
+      title = titulo,
+      x = "Índice / Tiempo",
+      y = "Error de pronóstico"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      axis.title = element_text(size = 12)
+    )
+}
+
+graficar_acf_errores <- function(errores, m = 24, titulo) {
+
+  acf_datos <- acf(errores, lag.max = m, plot = FALSE)
+  
+  acf_df <- data.frame(
+    lag = acf_datos$lag,
+    acf = acf_datos$acf
+  )
+  n <- length(errores)
+  banda <- 2 / sqrt(n)
+  
+  ggplot(acf_df, aes(x = lag, y = acf)) +
+    geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+    geom_hline(yintercept = c(-banda, banda), color = "blue", 
+               linetype = "dashed", linewidth = 0.6) +
+    geom_segment(aes(xend = lag, yend = 0), color = "steelblue", linewidth = 1) +
+    geom_point(color = "steelblue", size = 2) +
+    labs(
+      title = titulo,
+      x = "Rezago",
+      y = "Autocorrelación"
+    ) +
+    scale_x_continuous(breaks = seq(0, m, by = 2)) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      axis.title = element_text(size = 12)
+    )
+}
 
 ```
+
+**Serie 1 — Ganador: Holt-Winters Multiplicativo**
+
+**Gráfico de errores en el tiempo:**
+
+```{r}
+graficar_errores_tiempo(err_s1, "Errores de pronóstico — Serie 1")
+```
+
+**Banda de autocorrelación (ACF):**
+
+```{r}
+graficar_acf_errores(err_s1$error, m = 24, "ACF de los errores — Serie 1")
+```
+
+Los errores oscilan alrededor del valor cero sin sesgo ni tendencia sistemática. Se aprecia mayor volatilidad en la primera mitad de la serie y una disminución gradual hacia el final, pero sin patrón estacional visible en los residuos. Únicamente el rezago 0 sale fuera de las bandas de confianza. A partir del rezago 1 todos caen claramente dentro de los límites, incluidos los rezagos 12 y 24. No hay ninguna otra barra que se acerque a las líneas punteadas. con respecto a la pregunta, Sí queda autocorrelación significativa, concentrada en el rezago 2. Con respecto a la otra pregunta de que estructura no esta capturando el metodo, cabe decir primero que El modelo de Holt–Winters multiplicativo ya captura correctamente la tendencia y la estacionalidad anual de la serie pues no hay rezagos significativos en el periodo 12 ni 24, lo que confirma que el componente estacional queda bien modelado, Sin embargo, no aprovecha la relación de corto plazo: el valor de un periodo influye directamente en el siguiente, y esa dependencia de memoria corta persiste en los residuos. La influencia decae muy rápido y no se extiende a más periodos.
+
+**Tabla de pruebas diagnósticas:**
+
+```{r}
+mostrar_tabla(val_s1, "Pruebas diagnóstico — Serie 1")
+```
+
+En la validación de la Serie 1, la media de los errores no difiere de cero y su distribución es normal, lo que valida los supuestos para construir bandas de confianza. El estadístico de Durbin–Watson confirma ausencia de autocorrelación fuerte de orden 1. Sin embargo, la prueba de Ljung–Box detecta dependencia serial conjunta: aunque el modelo capta correctamente la tendencia y la estacionalidad de la serie, no incorpora la dependencia de corto plazo entre observaciones consecutivas. Esta estructura remanente es de magnitud reducida y no afecta la normalidad ni la ausencia de sesgo, por lo que el pronóstico con banda de confianza es válido, aunque podría mejorarse a muy corto plazo complementando el modelo con un término autorregresivo.
+
+### Serie 2 — Ganador: Tendencia cuadrática
+
+**Gráfico de errores en el tiempo:**
+
+```{r}
+graficar_errores_tiempo(err_s2, "Errores de pronóstico — Serie 2")
+```
+
+**Banda de autocorrelación (ACF):**
+
+```{r}
+graficar_acf_errores(err_s2$error, m = 24, "ACF de los errores — Serie 2")
+```
+
+Los errores oscilan alrededor del cero sin tendencia ni desplazamiento sistemático. Se observa mayor amplitud de variación hacia la parte final de la serie, pero sin que se aprecie un patrón repetitivo ni estabilidad que falte por capturar.Únicamente el rezago 1 sale claramente fuera de las bandas de confianza. A partir del rezago 1, todos caen dentro de los límites. No hay ninguna otra barra que se acerque a las líneas punteadas. Con respecto a la pregunta de si queda autocorrelacion, no parece por lo ya dicho, ningún otro rezago presenta dependencia estadísticamente significativa. Con respecto a la otra pregunta de explicar que estructura no esta capturando el metodo, cabe decir primero que este modelo capta correctamente la tendencia creciente de la serie pues no hay rezagos significativos en el largo plazo que indiquen tendencia olvidada, Sin embargo viene la parte que no capta y es que no recoge la dependencia de corto plazo: el valor de un periodo influye directamente en el siguiente, y esa relación inmediata persiste en los residuos. La influencia decae totalmente después del primer rezago; no hay estacionalidad ni memoria larga por capturar.
+
+**Tabla de pruebas diagnósticas:**
+
+```{r}
+mostrar_tabla(val_s2, "Pruebas diagnóstico — Serie 2")
+```
+
+En la validación de la Serie 2, la media de los errores no difiere de cero y su distribución es normal, lo que valida los supuestos para el cálculo de intervalos de confianza. El estadístico de Durbin–Watson confirma ausencia de autocorrelación fuerte de orden 1. La prueba de Ljung–Box detecta dependencia serial conjunta: el modelo recoge adecuadamente la tendencia de la serie, pero no incorpora la influencia inmediata de un periodo sobre el siguiente. Esta estructura remanente es de corta duración y no afecta la validez de los pronósticos a mediano y largo plazo; para predicciones a un paso adelante, el modelo podría complementarse con un término autorregresivo de orden 1.
+
+### Serie 3 — Ganador: Ingenuo
+
+**Gráfico de errores en el tiempo**
+
+```{r}
+graficar_errores_tiempo(err_s3, "Errores de pronóstico — Serie 3") 
+```
+
+**Banda de autocorrelación (ACF):**
+
+```{r}
+graficar_acf_errores(err_s3$error, m = 24, "ACF de los errores — Serie 3")
+```
+
+Los errores oscilan alrededor del cero sin tendencia ni desplazamiento sistemático. Se observa un patrón de alternancia entre picos y valles que se mantiene estable durante toda la serie, sin que la dispersión crezca o decrezca de forma sostenida.Los errores oscilan alrededor del cero sin tendencia ni desplazamiento sistemático. Se observa un patrón de alternancia entre picos y valles que se mantiene estable durante toda la serie, sin que la dispersión crezca o decrezca de forma sostenida. Con respecto a la pregunta de si queda autocorrelacion, no parece, pues ningún rezago presenta dependencia estadísticamente significativa (exceptuando el 0 que siempre es 1). Y con respecto a la otra pregunta de que estructura no esta capturando el metodo, cabe decir que el modelo ingenuo capta correctamente el nivel de la serie, no hay rezagos significativos en el largo plazo que indiquen estructura olvidada, Sin embargo, no recoge la dependencia de corto plazo: el valor de un periodo influye directamente en el siguiente, y esa relación inmediata persiste en los residuos. La influencia decae totalmente después del primer rezago; no hay estacionalidad, tendencia ni memoria larga por capturar.
+
+**Tabla de pruebas diagnósticas:**
+
+```{r}
+mostrar_tabla(val_s3, "Pruebas diagnóstico — Serie 3")
+```
+
+En la validación de la Serie 3, la media de los errores no difiere de cero y su distribución es normal, lo que permite construir intervalos de confianza válidos. Sin embargo, las pruebas detectan dependencia remanente más pronunciada que en las otras series: tanto Ljung–Box como Durbin–Watson confirman autocorrelación positiva de orden 1. Esto indica que el referente ingenuo recoge adecuadamente el nivel de la serie, pero no incorpora la fuerte influencia inmediata entre un periodo y el siguiente.
+
+**(e)** Pronóstico final. Con el ganador reajustado sobre toda la serie, los $H$ pronósticos siguientes graficados junto al último tramo de la serie, con una banda heurística de ±1,96 veces la desviación de los errores de origen móvil a cada horizonte, declarada como heurística.
+
+## Conclusión técnica
+
+## Argumentos para los interesados
