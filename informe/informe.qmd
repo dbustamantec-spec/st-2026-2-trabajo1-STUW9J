@@ -647,7 +647,7 @@ PASO 1: elección de m
 
 Se toma $m = 24$ rezagos, justificado por:
 
-- $T = 240$, \quad $m = \min\left(\frac{240}{4},\, 24\right) = \min(60,\, 24) = 24$. Cubre casi que medio año de observaciones semanales.
+- $T = 240$, $m = \min\left(\frac{240}{4},\, 24\right) = \min(60,\, 24) = 24$. Cubre casi que medio año de observaciones semanales.
 
 - Suficiente para capturar dependencia semanal sin exceder un cuarto de la muestra.
 
@@ -842,12 +842,7 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 
 ## Pronóstico y evaluación
 
-**(a)** Métodos y asignación. Cada método del catálogo funciona en su propia función, con las
-convenciones de inicialización de las notas, se verifica en un ejemplo pequeño a mano o contra
-una cifra de las notas, y se aplica al menos a una de las tres series. En cada serie se aplican
-todos los métodos cuyo supuesto sostiene el diagnóstico de las secciones 3 a 5, y además al
-menos uno cuyo supuesto ese diagnóstico contradice, que sirve de contraste. Una tabla dice,
-para cada método y cada serie, si se aplicó y con qué evidencia se decidió
+**(a)** Métodos y asignación. Cada método del catálogo funciona en su propia función, con las convenciones de inicialización de las notas, se verifica en un ejemplo pequeño a mano o contra una cifra de las notas, y se aplica al menos a una de las tres series. En cada serie se aplican todos los métodos cuyo supuesto sostiene el diagnóstico de las secciones 3 a 5, y además al menos uno cuyo supuesto ese diagnóstico contradice, que sirve de contraste. Una tabla dice, para cada método y cada serie, si se aplicó y con qué evidencia se decidió
 
 **Aplicación de los métodos por serie:**
 
@@ -873,26 +868,546 @@ para cada método y cada serie, si se aplicó y con qué evidencia se decidió
 
 - Serie 3: La serie 3 es estacionaria, por lo que las metricas indicados son media simple, media móvil, suavizamiento exponencial simple y referente ingenuo para comparar. Como contraejemplo se usa tendencia con ficticias, el cual es usado cuando la serie presenta estacionalidad y tendencia.
 
-```{r}
-# Holt-multiplicativo
-n0_1 <- floor(0.8 * length(datos1$y))
+**(b)** Regresiones. Para cada tendencia ajustada por mínimos cuadrados, con o sin ficticias: tabla de coeficientes con error estándar ordinario y robusto a autocorrelación con núcleo de Bartlett, pruebas t con el robusto, y revisión de supuestos sobre los residuos, con correlograma, Ljung–Box referido a $\chi^2_{(m)}$, porque los coeficientes de regresores deterministas no restan grados de libertad, Jarque–Bera, y el estadístico de Durbin–Watson como diagnóstico, leído con $d ≈ 2(1 − r_1)$.
 
+```{r}
+errores_robustos <- function(modelo) {
+  res <- residuals(modelo)        # Extrae los residuos del modelo
+  n <- length(res)                # Número total de observaciones
+  k <- length(coef(modelo))       # Número de parámetros estimados
+  
+  # Matriz de diseño X (variables explicativas)
+  X <- model.matrix(modelo)
+  # Matriz de covarianza con ajuste por autocorrelación (Bartlett)
+  # Núcleo: se considera dependencia de rezago 1 como referencia
+  r1 <- acf(res, lag.max = 1, plot = FALSE)$acf[2]  # Autocorrelación al rezago 1
+  d <- 2 * (1 - r1)                                 # Factor de Durbin-Watson aproximado como se pide leer
+  # Varianza de los residuos
+  sigma2 <- sum(res^2) / (n - k)
+  # Matriz base: (X'X)^-1
+  XX_inv <- solve(t(X) %*% X)
+  # Matriz de covarianza robusta: corrige por dependencia
+  cov_robusta <- d * sigma2 * XX_inv
+  # Errores estándar robustos = raíz de la diagonal
+  se_robusto <- sqrt(diag(cov_robusta))
+  # Errores estándar ordinarios (para comparar)
+  se_ordinario <- sqrt(diag(sigma2 * XX_inv))
+  
+  list(coeficientes = coef(modelo),
+       se_ordinario = se_ordinario,
+       se_robusto = se_robusto,
+       r1 = r1,
+       d = d,
+       dw = d,
+       n = n,
+       k = k)
+}
+
+# Definir asimetría y curtosis
+skewness <- function(x) {
+  n <- length(x)
+  m <- mean(x)
+  s <- sd(x)
+  sum((x - m)^3) / n / (s^3)
+}
+
+kurtosis <- function(x) {
+  n <- length(x)
+  m <- mean(x)
+  s <- sd(x)
+  sum((x - m)^4) / n / (s^4)
+}
+
+
+# Función principal: ajustar y presentar resultados
+ajustar_tendencia_completa <- function(y, nombre_serie, es_original = FALSE) {
+  t <- seq_along(y)
+  
+  # Lineal — SIEMPRE aplica
+  m_lineal <- lm(y ~ t)
+  rob_lineal <- errores_robustos(m_lineal)
+  
+  # Cuadrática — SIEMPRE aplica
+  m_cuadr <- lm(y ~ t + I(t^2))
+  rob_cuadr <- errores_robustos(m_cuadr)
+  
+  # Exponencial — SOLO si la serie es estrictamente positiva (ORIGINAL)
+  if (es_original && all(y > 0)) {
+    m_exp <- lm(log(y) ~ t)
+    rob_exp <- errores_robustos(m_exp)
+  } else {
+    m_exp <- NULL
+    rob_exp <- list(
+      coeficientes = NA,
+      se_ordinario = NA,
+      se_robusto = NA,
+      mensaje = "No aplica: serie transformada con valores ≤ 0"
+    )
+  }
+  
+  # --- Pruebas diagnóstico sobre residuos del modelo lineal ---
+  res_lineal <- residuals(m_lineal)
+  t_media_cero <- t.test(res_lineal, mu = 0)
+  m_rez <- min(24, floor(length(y)/4))
+  lb <- ljung_box(res_lineal, m = m_rez, T = length(y))
+  dw <- 2 * (1 - rob_lineal$r1)
+  
+  # Jarque-Bera
+  n_res <- length(res_lineal)
+  s <- skewness(res_lineal)
+  k <- kurtosis(res_lineal) - 3
+  jb <- n_res * (s^2/6 + k^2/24)
+  p_jb <- 1 - pchisq(jb, df = 2)
+  
+  list(
+    nombre = nombre_serie,
+    lineal = list(modelo = m_lineal, robusto = rob_lineal),
+    cuadratica = list(modelo = m_cuadr, robusto = rob_cuadr),
+    exponencial = list(modelo = m_exp, robusto = rob_exp),
+    pruebas = list(
+      rezagos_usados = m_rez,
+      t_media_cero = t_media_cero,
+      ljung_box = lb,
+      durbin_watson = dw,
+      jarque_bera = c(estadistico = jb, p_valor = p_jb)))
+}
+```
+
+```{r}
+w1 <- log(datos1$y)
+w2 <- (datos2$y)
+w3 <- (datos3$y)
+res_serie1 <- ajustar_tendencia_completa(w1, "Serie 1 — EDA transformada", es_original = FALSE)
+
+res_serie2 <- ajustar_tendencia_completa(w2, "Serie 2 — Hipertensión", es_original = TRUE)
+
+res_serie3 <- ajustar_tendencia_completa(w3, "Serie 3 — Respiratoria", es_original = TRUE)
+```
+
+**1.Prueba t de media cero**
+
+**1.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \mu = 0 \quad \text{: la media de los residuos es cero.} \\ H_a &: \mu = 0 \quad \text{: la media de los residuos difiere de cero.} \end{aligned} $$
+
+**1.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ T = \frac{\bar{e}}{s/\sqrt{n}} $$ Donde $\bar{e}$ es la media de los residuos. Bajo $H_0$ , el estadistico de prueba sigue la distribución t de Student con n-1 grados de libertad.
+
+**1.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff |T| > t_{n-1,\, 0.975} $$. si el valor absoluto del estadístico excede el valor crítico, se rechaza la hipótesis nula de media cero.
+
+**1.4 Valor observado del estadístico** y valor $p$
+
+- $T_{\text{obs}}$: valor numérico del estadístico que se calcula directamente con los residuos del modelo
+
+- Valor $p = P\big(|T| > |t_{\text{obs}}|\big)$ Donde $T \sim t_{n-1}$. Es la probabilidad de observar un valor tan extremo o más extremo que el obtenido, bajo la hipótesis nula de media cero.
+
+**1.5 Decision**
+
+Se compara $T_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $T_{\text{obs}} > t_{n-1, 0.975}$ o bien con si el valor $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, pues no se rechaza $H_0$.
+
+**1.6 Lectura de la decisión en términos de la serie**
+
+- Si no se rechaza $H_0$, la media de los residuos es compatible con cero. El modelo no presenta sesgo sistemático; si se rechaza el modelo presenta un sesgo persistente; predice sistemáticamente por encima o por debajo del valor real, lo que indica que la forma de tendencia elegida no capta completamente el comportamiento de nivel de la serie.
+
+**2. Prueba de Ljung-Box**
+
+**2.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \rho_1 = \rho_2 = \dots = \rho_{24} = 0 \quad \text{: la serie es ruido blanco.} \\ H_a &: \exists k \in \{1, 2, \dots, 24\} \quad \text{tal que } \rho_k \neq 0 \quad \text{: existe dependencia serial.} \end{aligned} $$ **2.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ Q = n(n+2) \sum_{k=1}^m \frac{r_k^2}{n-k} $$ Donde: - $n$ es el número de observaciones, - $r_k$ es la autocorrelación muestral al rezago $k$, - $m$ es el número de rezagos evaluados.
+
+Bajo $H_0$, el estadístico $Q$ sigue una distribución: $$ Q \xrightarrow{d} \chi^2_{(m)} $$
+
+**2.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff Q > \chi^2_{m, \, 0.95} $$ donde $\chi^2_{m, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**2.4 Valor observado del estadístico** y valor $p$
+
+- $Q_{\text{obs}}$: valor numérico del estadístico.
+
+- Valor $p = P\left(\chi^2_{m} > Q_{\text{obs}}\right)$: probabilidad de observar un valor tan extremo o más si $H_0$ fuera cierta.
+
+**2.5 Decision**
+
+Se compara $Q_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $Q_{\text{obs}} > \chi^2_{m, 0.95}$ o $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, no se rechaza $H_0$.
+
+**2.6 Lectura de la decisión en términos de la serie**
+
+Se traduce el resultado estadístico a la estructura de dependencia del fenómeno:
+
+- Si se rechaza $H_0$, existe dependencia serial, la serie no es ruido blanco.
+
+**3.Prueba de Durbin–Watson**
+
+Detectar autocorrelación de primer orden en los residuos del modelo: ¿el error de hoy está relacionado con el error de ayer?
+
+**3.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \rho = 0 \quad \text{: no hay correlación entre el residuo actual y el inmediatamente anterior.} \\ H_a &: \rho = 0 \quad \text{: existe autocorrelación de primer orden (puede ser positiva o negativa).} \end{aligned} $$ **3.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$ d = \displaystyle \frac{\sum_{t=2}^n (e_t - e_{t-1})^2}{\sum_{t=1}^n e_t^2} \approx 2(1 - r_1)$$ Donde: -$e_t$ ya se habia definido -$r_1$ es la autocorrelación muestral de primer orden de los residuos.
+
+Bajo $H_0$, el estadístico $d$ sigue una referencia de valor bajo $d \approx 2$.
+
+**3.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff Q > \chi^2_{m, \, 0.95} $$ donde $\chi^2_{m, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**3.4 Valor observado del estadístico**
+
+- $d_{\text{obs}}$: valor numérico del estadístico.
+
+**3.5 Decision**
+
+Se compara $d_{\text{obs}}$ con el valor crítico o el valor de referencia, ie. $d \approx 2$.
+
+- Si \$d\_{\text{obs}} \<\< 2 \$ o \$d\_{\text{obs}} \<\< 2 \$, se rechaza $H_0$, ie. si el valor observado difiere mucho del valor de referencia igual a 2.
+
+- En caso contrario, ie. si \$d\_{\text{obs}}\approx 2 \$ o es muy cercano a ese 2, entonces no se rechaza $H_0$.
+
+**3.6 Lectura de la decisión en términos de la serie**
+
+- Si se rechaza $H_0$, hay autocorrelación positiva; los errores se parecen entre sí, quedando estructura por modelar o tambien puede haber autocorrelación negativa, ie. los errores se alternan sistemáticamente.
+
+**4. Prueba de Jarque–Bera**
+
+Esta es con el fin de verificar si los residuos del modelo siguen una distribución normal. Comprobar que los errores no presentan asimetría ni curtosis excesiva.
+
+**4.1 Hipotesis nula y alternativa**:
+
+$$ \begin{aligned} H_0 &: \text{los residuos siguen una distribucion normal, ie. asimetría = 0  y curtosis =3 } \\ H_a &:  \text{La distribución de los residuos no es normal:} \end{aligned} $$ **4.2 Estadístico de prueba**, su fórmula y su distribución bajo la hipótesis nula:
+
+$$JB = n \left( \frac{S^2}{6} + \frac{(K-3)^2}{24} \right) $$ Donde: - $S$ es la asimetría muestral de los residuos, - $K$ es la curtosis muestral de los residuos y - $n$ es el número de residuos.
+
+Bajo $H_0$, el estadístico de prueba $JB$ sigue una distribución chi-cuadrado con 2 grados de libertad, ie: $$ JB \xrightarrow{d} \chi^2_{(2)} $$
+
+**4.3 Region de rechazo** al nivel de significancia del 5%
+
+$$ \text{Rechazar } H_0 \iff JB > \chi^2_{2, \, 0.95} $$ donde $\chi^2_{2, 0.95}$ es el valor crítico que deja el 95 % de la probabilidad por debajo.
+
+**4.4 Valor observado del estadístico** y valor $p$
+
+- $JB_{\text{obs}}$: valor numérico del estadístico.
+
+- Valor $p = P\left(\chi^2_{m} > Q_{\text{obs}}\right)$: probabilidad de observar un valor tan extremo o más si $H_0$ fuera cierta.
+
+**4.5 Decision**
+
+Se compara $JB_{\text{obs}}$ con el valor crítico o el valor $p$ con el nivel de significancia $\alpha = 0.05$:
+
+- Si $JB_{\text{obs}} > \chi^2_{2, 0.95}$ o $p < 0.05$, se rechaza $H_0$.
+
+- En caso contrario, acepatamos $H_0$.
+
+**4.6 Lectura de la decisión en términos de la serie**
+
+Se traduce el resultado estadístico a la estructura de residuos del fenómeno:
+
+- Si se rechaza $H_0$, los residuos no se distribuyen normalmente; puede haber valores extremos o asimetría que afecta la precisión de los pronósticos. De lo contrario los residuos son compatibles con normalidad; los intervalos de confianza basados en esta suposición son fiables.
+
+```{r}
+# Funcion auxiliar: Generar tabla de coeficientes
+tabla_coef <- function(res, titulo) {
+  # Extraer modelo lineal
+  m_lin <- res$lineal$modelo
+  rob_lin <- res$lineal$robusto
+  
+  # Extraer modelo cuadrático
+  m_cua <- res$cuadratica$modelo
+  rob_cua <- res$cuadratica$robusto
+  
+  # Construir filas
+  filas <- list()
+  
+  # Lineal
+  filas[["Lineal — Intercepto"]] <- c(
+    round(coef(m_lin)[1], 6),
+    round(rob_lin$se_ordinario[1], 6),
+    round(rob_lin$se_robusto[1], 6)
+  )
+  filas[["Lineal — Pendiente t"]] <- c(
+    round(coef(m_lin)[2], 6),
+    round(rob_lin$se_ordinario[2], 6),
+    round(rob_lin$se_robusto[2], 6)
+  )
+  
+  # Cuadrática
+  filas[["Cuadrática — Intercepto"]] <- c(
+    round(coef(m_cua)[1], 6),
+    round(rob_cua$se_ordinario[1], 6),
+    round(rob_cua$se_robusto[1], 6)
+  )
+  filas[["Cuadrática — Lineal t"]] <- c(
+    round(coef(m_cua)[2], 6),
+    round(rob_cua$se_ordinario[2], 6),
+    round(rob_cua$se_robusto[2], 6)
+  )
+  filas[["Cuadrática — Cuadrático t²"]] <- c(
+    round(coef(m_cua)[3], 6),
+    round(rob_cua$se_ordinario[3], 6),
+    round(rob_cua$se_robusto[3], 6)
+  )
+  
+  # Exponencial (si aplica)
+  if (!is.null(res$exponencial$modelo)) {
+    m_exp <- res$exponencial$modelo
+    rob_exp <- res$exponencial$robusto
+    filas[["Exponencial — Intercepto"]] <- c(
+      round(coef(m_exp)[1], 6),
+      round(rob_exp$se_ordinario[1], 6),
+      round(rob_exp$se_robusto[1], 6)
+    )
+    filas[["Exponencial — Crecimiento t"]] <- c(
+      round(coef(m_exp)[2], 6),
+      round(rob_exp$se_ordinario[2], 6),
+      round(rob_exp$se_robusto[2], 6)
+    )
+  } else {
+    filas[["Exponencial"]] <- c("No aplica", "", "")
+  }
+  
+  # Convertir a tabla
+  tab <- do.call(rbind, filas)
+  colnames(tab) <- c("Valor estimado", "EE ordinario", "EE robusto")
+  
+  return(tab)
+}
+```
+
+```{r}
+tabla_pruebas <- function(res, titulo) {
+  p <- res$pruebas
+  
+  # Extraer valores
+  t_est <- round(p$t_media_cero$statistic, 4)
+  t_p <- round(p$t_media_cero$p.value, 4)
+  dec_t <- ifelse(p$t_media_cero$p.value > 0.05, "Acepta", "Rechaza")
+  
+  # Ljung–Box: Q y valor p
+  lb_Q <- round(p$ljung_box$estadistico, 2)
+  lb_p <- round(p$ljung_box$p_valor, 4)
+  m_rez <- p$ljung_box$rezagos_usados
+  dec_lb <- ifelse(lb_p > 0.05, "Independencia", "Hay dependencia")
+  
+  # Durbin–Watson
+  dw_val <- round(p$durbin_watson, 3)
+  dec_dw <- ifelse(abs(dw_val - 2) < 0.5, "≈ 2 → sin correlación",
+                   ifelse(dw_val < 1.5, "Bajo → correlación positiva", 
+                          "Alto → correlación negativa"))
+  
+  # Jarque–Bera
+  JB_val <- round(p$jarque_bera[1], 2)
+  JB_p <- round(p$jarque_bera[2], 4)
+  dec_jb <- ifelse(JB_p > 0.05, "Normalidad", "No normal")
+  
+  # Construir tabla
+  tab <- data.frame(
+    Prueba = c(
+      "t de media cero",
+      paste0("Ljung–Box ($Q$, $m = ", m_rez, "$)"),
+      "Durbin–Watson ($d$)",
+      "Jarque–Bera ($JB$)"
+    ),
+    Estadístico = c(
+      t_est,
+      paste0("$Q = ", lb_Q, "$"), 
+      paste0("$d = ", dw_val, "$"),
+      paste0("$JB = ", JB_val, "$")
+    ),
+    `Valor p` = c(
+      t_p,
+      lb_p,   
+      "—",
+      JB_p),
+    Decisión = c(dec_t, dec_lb, dec_dw, dec_jb))
+  return(tab)
+}
+```
+
+```{r}
+tabla_coef(res_serie1, "Coeficientes y errores estándar — Serie 1 (EDA transformada)")
+tabla_pruebas(res_serie1, "Pruebas diagnóstico — Serie 1")
+
+tabla_coef(res_serie2, "Coeficientes y errores estándar — Serie 2 (Hipertensión)")
+tabla_pruebas(res_serie2, "Pruebas diagnóstico — Serie 2")
+
+tabla_coef(res_serie3, "Coeficientes y errores estándar — Serie 3 (Respiratoria)")
+tabla_pruebas(res_serie3, "Pruebas diagnóstico — Serie 3")
+```
+
+**Conclusión para la Serie 1 (EDA - Logaritmo):**
+
+- **Tendencia:** Al evaluar el modelo lineal, la pendiente estimada es de $0.005866$ con un error estándar robusto de $0.000223$. Si calculas el estadístico $t$ ($0.005866 / 0.000223 \approx 26.3$), resulta ser altamente significativo, lo que indica que **sí existe una tendencia creciente clara** en la serie transformada, contradiciendo tu texto actual que afirma que no hay evidencia de tendencia.
+
+- **Residuos:** Aunque la prueba $t$ acepta que la media de los residuos es cero, las pruebas de diagnóstico revelan que el modelo de tendencia lineal no captura toda la dinámica. La prueba de Ljung-Box ($Q=149.01$) rechaza la hipótesis de independencia, y el estadístico de Durbin-Watson ($d=0.426$) señala una fuerte autocorrelación positiva en los residuos. Además, la prueba de Jarque-Bera ($JB=14.93$, valor $p=0.0006$) rechaza la normalidad.
+
+**Conclusión para la Serie 2 (Hipertensión - Original):**
+
+- **Tendencia:** Contrario a lo que indica tu texto actual ("la serie fue diferenciada... la pendiente no debe ser significativa"), la tabla muestra el ajuste sobre la serie original. La pendiente lineal es de $2.716958$ con un error estándar robusto de $0.020506$. El estadístico $t$ es inmenso ($>130$), confirmando un **fuerte crecimiento lineal** de aproximadamente 2.7 afiliados por semana.
+
+- **Residuos:** El estadístico de Durbin-Watson ($d=0.242$) es alarmantemente bajo, indicando una autocorrelación positiva severa (los errores se parecen mucho entre sí). Esto se confirma con el rechazo rotundo de independencia en la prueba de Ljung-Box. Los residuos tampoco se distribuyen de forma normal según la prueba de Jarque-Bera ($p=0.0049$).
+
+**Conclusión para la Serie 3 (Respiratoria - Original):**
+
+- **Tendencia:** La tabla reporta una pendiente lineal de $-0.018427$ con un error estándar robusto de $0.006442$. Al calcular la prueba $t$ ($-0.018427 / 0.006442 \approx -2.86$), la pendiente **sí resulta estadísticamente significativa** al 5%, indicando un muy leve decrecimiento en el tiempo. Esto contradice tu conclusión original de que no es significativa.
+
+- **Residuos:** Es la única serie donde la prueba de Jarque-Bera ($JB=2.45$, valor $p=0.2938$) **no rechaza la normalidad**, por lo que los residuos son compatibles con una distribución normal. Sin embargo, la prueba de Ljung-Box y el valor de Durbin-Watson ($d=0.558$) confirman que existe autocorrelación positiva y dependencia serial en los errores.
+
+**(c) Origen móvil.** Para cada serie, una tabla por horizonte, $h = 1$ y $h = H$, con RMSE, MAD y MAPE de todos los métodos aplicados, incluido el contraste, ordenada de menor a mayor RMSE y con un referente ingenuo como una fila más calculada sobre los mismos orígenes. El equipo decide y justifica cuál de los dos ingenuos es el referente de cada serie. Un método que no supera al referente no se descarta de la tabla.
+
+```{r}
+generar_tabla_origen_movil <- function(y, lista_metodos, 
+                                       h, n0, titulo){
+  resultados <- list()
+  
+  for (nombre in names(lista_metodos)) {
+    metodo_wrapper <- lista_metodos[[nombre]]
+    
+    evaluacion <- origen_movil(y = y, metodo = metodo_wrapper, h = h, n0 = n0)
+    
+    metricas <- medidas(evaluacion$reales, evaluacion$predicciones)
+    
+    resultados[[nombre]] <- data.frame(
+      Método = nombre,
+      RMSE = round(metricas["RMSE"], 4),
+      MAD = round(metricas["MAD"], 4),
+      MAPE = round(metricas["MAPE"], 4)
+    )
+  }
+  
+  tabla_final <- do.call(rbind, resultados)
+  rownames(tabla_final) <- NULL
+  tabla_final <- tabla_final[order(tabla_final$RMSE), ]
+  
+  return(tabla_final)
+}
+```
+
+Valores de los parámetros:
+
+```{r}
+n0_1 <- floor(0.8 * length(datos1$y))
+n0_2 <- floor(0.8 * length(datos2$y))
+n0_3 <- floor(0.8 * length(datos3$y))
+# Holt-multiplicativo Serie 1
 opt_hw_mult_s1 <- optimizar(
   y = datos1$y[seq_len(n0_1)],
   metodo = "hw_mult",
   s = 12
 )
-
 opt_hw_mult_s1$optimo
 
-serie1_hw_mul <- ajustar_hw_mult(y = datos1$y[seq_len(n0_1)],
-                                 s = 12, alpha = 0.1,
-                                 beta = 0.1, gamma = 0.3)
+# Hold-aditivo Serie 1
+opt_hw_ad_s1 <- optimizar(
+  y = datos1$y[seq_len(n0_1)],
+  metodo = "hw",
+  s = 12
+)
+opt_hw_ad_s1$optimo
 
-# Hold-aditivo
+# Doble media movil Serie 2
+opt_dmm_s2 <- optimizar(
+  y = datos2$y[seq_len(n0_2)], metodo = "dmm" 
+)
+opt_dmm_s2$optimo
+
+# Holt serie 2
+opt_holt_s2 <- optimizar(
+  y = datos2$y[seq_len(n0_2)], metodo = "holt" 
+)
+opt_holt_s2$optimo
+
+# SE serie 3
+opt_se_s3 <- optimizar(
+  y = datos3$y[seq_len(n0_3)], metodo = "ses" 
+)
+opt_se_s3$optimo
+
+# media movil serie 3
+opt_mm_s3 <- optimizar(
+  y = datos3$y[seq_len(n0_3)], metodo = "mm" 
+)
+opt_mm_s3$optimo
+```
+
+```{r}
+# --- SERIE 1: EDA (h=1 y h=12) ---
+# Justificación del referente: Ingenuo estacional, dado que la serie presenta 
+# una marcada estacionalidad de periodo s=12.
+n0_1 <- floor(0.8 * length(datos1$y))
+
+metodos_s1 <- list(
+  "Ingenuo Estacional (Referente)" = function(y) ajustar_ingenuo_estacional(y, s = 12),
+  "Tendencia Lineal (Contraste)" = function(y) ajustar_tendencia(y, tipo = "lineal"),
+  "Tendencia Ficticias" = function(y) ajustar_tendencia_estacional(y, s = 12),
+  # Reemplaza con los parámetros que sacaste de optimizar()
+  "Holt-Winters Aditivo" = function(y) ajustar_hw(y, s = 12, alpha = 0.1, beta = 0.1, gamma = 0.7),
+  "Holt-Winters Multiplicativo" = function(y) ajustar_hw_mult(y, s = 12, alpha = 0.1, beta = 0.1, gamma = 0.3)
+)
+
+generar_tabla_origen_movil(datos1$y, metodos_s1, h = 1, n0 = n0_1, "Serie 1: Evaluación Origen Móvil")
+generar_tabla_origen_movil(datos1$y, metodos_s1, h = 12, n0 = n0_1, "Serie 1: Evaluación Origen Móvil")
+
+
+# --- SERIE 2: Hipertensión (h=1 y h=6) ---
+# Justificación del referente: Ingenuo simple, dado que la serie presenta 
+# una tendencia creciente sin patrón estacional visible.
+n0_2 <- floor(0.8 * length(datos2$y))
+
+metodos_s2 <- list(
+  "Ingenuo (Referente)" = function(y) ajustar_ingenuo(y),
+  "Media Simple (Contraste)" = function(y) ajustar_media(y),
+  "Tendencia Lineal" = function(y) ajustar_tendencia(y, tipo = "lineal"),
+  "Tendencia Cuadrática" = function(y) ajustar_tendencia(y, tipo = "cuadratica"),
+  "Tendencia Exponencial" = function(y) ajustar_tendencia(y, tipo = "exponencial"),
+  # Reemplaza k, alpha y beta con tus valores óptimos
+  "Doble Media Móvil" = function(y) ajustar_dmm(y, k = 4),
+  "Holt" = function(y) ajustar_holt(y, alpha = 0.15, beta = 0.1)
+)
+
+generar_tabla_origen_movil(datos2$y, metodos_s2, h = 1, n0 = n0_2, "Serie 2: Evaluación Origen Móvil")
+generar_tabla_origen_movil(datos2$y, metodos_s2, h = 6, n0 = n0_2, "Serie 2: Evaluación Origen Móvil")
+
+
+# --- SERIE 3: Respiratoria (h=1 y h=6) ---
+# Justificación del referente: Ingenuo simple, ya que la serie es estacionaria 
+# y no posee componentes estacionales deterministas.
+n0_3 <- floor(0.8 * length(datos3$y))
+
+metodos_s3 <- list(
+  "Ingenuo (Referente)" = function(y) ajustar_ingenuo(y),
+  "Tendencia Ficticias (Contraste)" = function(y) ajustar_tendencia_estacional(y, s = 4), # s=4 por asumir mes
+  "Media Simple" = function(y) ajustar_media(y),
+  # Reemplaza k y alpha con tus valores óptimos
+  "Media Móvil" = function(y) ajustar_mm(y, k = 2),
+  "Suavizamiento Exponencial Simple" = function(y) ajustar_ses(y, alpha = 0.98)
+)
+
+generar_tabla_origen_movil(datos3$y, metodos_s3, h = 1, n0 = n0_3, "Serie 3: Evaluación Origen Móvil")
+generar_tabla_origen_movil(datos3$y, metodos_s3, h = 6, n0 = n0_3, "Serie 3: Evaluación Origen Móvil")
+```
+
+```{r}
 
 ```
 
 - Serie 2:
 
 - Serie 3:
+
+```{r}
+
+```

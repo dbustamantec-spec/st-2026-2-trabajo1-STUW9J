@@ -27,7 +27,8 @@ optimizar <- function(y, metodo, rejilla = NULL, s = NULL) {
         stop(sprintf("rejilla debe tener la columna %s.", columnas),
              call. = FALSE)
       }
-      rejilla <- rejilla[, columnas]
+      # CORRECCIÓN: Agregado drop = FALSE para que no se convierta en vector
+      rejilla <- rejilla[, columnas, drop = FALSE] 
     } else {
       if (!is.numeric(rejilla) || !is.null(dim(rejilla)) ||
           length(rejilla) == 0L) {
@@ -40,6 +41,7 @@ optimizar <- function(y, metodo, rejilla = NULL, s = NULL) {
     stop(sprintf("rejilla debe ser un data.frame con: %s.",
                  paste(columnas, collapse = ", ")), call. = FALSE)
   }
+  
   rejilla <- rejilla[, columnas, drop = FALSE]
   if (anyNA(rejilla) ||
       any(!vapply(rejilla, is.numeric, logical(1))) ||
@@ -66,26 +68,42 @@ optimizar <- function(y, metodo, rejilla = NULL, s = NULL) {
     }
   }
   
+  # Construcción de modelos con manejo de errores (tryCatch)
   modelos <- lapply(seq_len(nrow(rejilla)), function(i) {
-    .crear_metodo_rejilla(y, metodo, rejilla[i, , drop = FALSE], s)
+    tryCatch({
+      .crear_metodo_rejilla(y, metodo, rejilla[i, , drop = FALSE], s)
+    }, error = function(e) {
+      list(yhat = rep(NA_real_, length(y)))
+    })
   })
+  
+  # 1. Identificar cuáles modelos no fallaron
+  modelos_validos <- vapply(modelos, function(m) any(is.finite(m$yhat)), logical(1))
+  
+  if (!any(modelos_validos)) {
+    stop("Ninguna combinacion de la rejilla produjo un modelo valido.", call. = FALSE)
+  }
+  
+  # 2. Calcular la máscara común SOLO con los modelos válidos
   mascara_comun <- Reduce(
     `&`,
-    lapply(modelos, function(modelo) {
+    lapply(modelos[modelos_validos], function(modelo) {
       is.finite(modelo$yhat) & is.finite(y)
     })
   )
+  
   if (!any(mascara_comun)) {
-    stop("No hay origenes comunes con pronostico valido para comparar la rejilla.",
-         call. = FALSE)
+    stop("No hay origenes comunes con pronostico valido para comparar la rejilla.", call. = FALSE)
   }
-  mse <- vapply(modelos, function(modelo) {
-    mean((y[mascara_comun] - modelo$yhat[mascara_comun])^2)
+  
+  # 3. Calcular el MSE 
+  mse <- vapply(seq_along(modelos), function(i) {
+    if (!modelos_validos[i]) {
+      return(Inf)
+    }
+    mean((y[mascara_comun] - modelos[[i]]$yhat[mascara_comun])^2)
   }, numeric(1))
-  if (any(!is.finite(mse))) {
-    stop("La rejilla produjo un MSE no finito; revise los datos y parametros.",
-         call. = FALSE)
-  }
+  
   tabla <- cbind(rejilla, mse = mse)
   optimo <- tabla[which.min(tabla$mse), , drop = FALSE]
   
@@ -97,4 +115,68 @@ optimizar <- function(y, metodo, rejilla = NULL, s = NULL) {
     indices_mse = which(mascara_comun),
     numero_origenes = sum(mascara_comun)
   )
+}
+ 
+
+
+# origne
+origen_movil <- function(y, metodo, h, n0, ...) {
+  # n0: tamaño del tramo de estimación
+  # h: horizonte de pronóstico a evaluar
+  # metodo: función del método (ej. ajustar_holt, ajustar_ses)
+  # ... : parámetros fijos elegidos previamente por optimizar()
+  
+  T_total <- length(y)
+  origenes <- n0:(T_total - h)
+  
+  # Vectores para almacenar resultados
+  reales <- numeric(length(origenes))
+  predicciones <- numeric(length(origenes))
+  errores <- numeric(length(origenes))
+  
+  for (i in seq_along(origenes)) {
+    o <- origenes[i]
+    
+    # El método recibe estrictamente la información hasta el origen 'o'
+    y_o <- y[1:o]
+    
+    # Se ajusta el modelo con la historia recortada y los parámetros fijos
+    modelo <- metodo(y_o, ...)
+    
+    # Se pronostica hasta el horizonte 'h'
+    pronosticos <- modelo$pronosticar(h)
+    
+    # Se extrae la predicción específica para el paso 'h'
+    pred <- pronosticos[h]
+    real <- y[o + h]
+    
+    predicciones[i] <- pred
+    reales[i] <- real
+    errores[i] <- real - pred
+  }
+  
+  # Retorna una lista con la información completa de la evaluación
+  list(
+    origenes = origenes,
+    reales = reales,
+    predicciones = predicciones,
+    errores = errores
+  )
+}
+
+# medidas
+medidas <- function(reales, predicciones) {
+  errores <- reales - predicciones
+  
+  # RMSE: Root Mean Squared Error
+  rmse <- sqrt(mean(errores^2, na.rm = TRUE))
+  
+  # MAD: Mean Absolute Deviation
+  mad <- mean(abs(errores), na.rm = TRUE)
+  
+  # MAPE: Mean Absolute Percentage Error (expresado en porcentaje)
+  mape <- mean(abs(errores / reales), na.rm = TRUE) * 100
+  
+  # Retorna un vector con los nombres para facilitar la creación de tablas
+  c(RMSE = rmse, MAD = mad, MAPE = mape)
 }
