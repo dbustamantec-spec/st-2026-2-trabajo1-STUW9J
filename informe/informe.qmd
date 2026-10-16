@@ -872,25 +872,20 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 
 ```{r}
 errores_robustos <- function(modelo) {
-  res <- residuals(modelo)        # Extrae los residuos del modelo
-  n <- length(res)                # Número total de observaciones
-  k <- length(coef(modelo))       # Número de parámetros estimados
+  res <- residuals(modelo)        
+  n <- length(res)                
+  k <- length(coef(modelo))      
   
-  # Matriz de diseño X (variables explicativas)
   X <- model.matrix(modelo)
-  # Matriz de covarianza con ajuste por autocorrelación (Bartlett)
-  # Núcleo: se considera dependencia de rezago 1 como referencia
-  r1 <- acf(res, lag.max = 1, plot = FALSE)$acf[2]  # Autocorrelación al rezago 1
-  d <- 2 * (1 - r1)                                 # Factor de Durbin-Watson aproximado como se pide leer
-  # Varianza de los residuos
+  r1 <- acf(res, lag.max = 1, plot = FALSE)$acf[2]  
+  d <- 2 * (1 - r1)                                 
   sigma2 <- sum(res^2) / (n - k)
-  # Matriz base: (X'X)^-1
+
   XX_inv <- solve(t(X) %*% X)
-  # Matriz de covarianza robusta: corrige por dependencia
+
   cov_robusta <- d * sigma2 * XX_inv
-  # Errores estándar robustos = raíz de la diagonal
+
   se_robusto <- sqrt(diag(cov_robusta))
-  # Errores estándar ordinarios (para comparar)
   se_ordinario <- sqrt(diag(sigma2 * XX_inv))
   
   list(coeficientes = coef(modelo),
@@ -1119,20 +1114,13 @@ Se traduce el resultado estadístico a la estructura de residuos del fenómeno:
 - Si se rechaza $H_0$, los residuos no se distribuyen normalmente; puede haber valores extremos o asimetría que afecta la precisión de los pronósticos. De lo contrario los residuos son compatibles con normalidad; los intervalos de confianza basados en esta suposición son fiables.
 
 ```{r}
-# Funcion auxiliar: Generar tabla de coeficientes
 tabla_coef <- function(res, titulo) {
-  # Extraer modelo lineal
   m_lin <- res$lineal$modelo
   rob_lin <- res$lineal$robusto
   
-  # Extraer modelo cuadrático
   m_cua <- res$cuadratica$modelo
   rob_cua <- res$cuadratica$robusto
-  
-  # Construir filas
   filas <- list()
-  
-  # Lineal
   filas[["Lineal — Intercepto"]] <- c(
     round(coef(m_lin)[1], 6),
     round(rob_lin$se_ordinario[1], 6),
@@ -1143,8 +1131,7 @@ tabla_coef <- function(res, titulo) {
     round(rob_lin$se_ordinario[2], 6),
     round(rob_lin$se_robusto[2], 6)
   )
-  
-  # Cuadrática
+
   filas[["Cuadrática — Intercepto"]] <- c(
     round(coef(m_cua)[1], 6),
     round(rob_cua$se_ordinario[1], 6),
@@ -1160,8 +1147,7 @@ tabla_coef <- function(res, titulo) {
     round(rob_cua$se_ordinario[3], 6),
     round(rob_cua$se_robusto[3], 6)
   )
-  
-  # Exponencial (si aplica)
+
   if (!is.null(res$exponencial$modelo)) {
     m_exp <- res$exponencial$modelo
     rob_exp <- res$exponencial$robusto
@@ -1238,7 +1224,7 @@ tabla_pruebas <- function(res, titulo) {
 ```
 
 ```{r}
-tabla_coef(res_serie1, "Coeficientes y errores estándar — Serie 1 (EDA transformada)")
+tabla_coef(res_serie1, "Coeficientes y errores estándar — Serie 1 (EDA)")
 tabla_pruebas(res_serie1, "Pruebas diagnóstico — Serie 1")
 
 tabla_coef(res_serie2, "Coeficientes y errores estándar — Serie 2 (Hipertensión)")
@@ -1529,6 +1515,7 @@ validar_ganador <- function(errores, titulo) {
 alpha_s1 <- opt_hw_mult_s1$optimo$alpha
 beta_s1  <- opt_hw_mult_s1$optimo$beta
 gamma_s1 <- opt_hw_mult_s1$optimo$gamma
+alpha_s3 <- opt_se_s3$optimo$alpha 
 
 ganador_s1 <- function(y) {
   ajustar_hw_mult(y, 
@@ -1545,7 +1532,7 @@ ganador_s2 <- function(y) {
 
 
 ganador_s3 <- function(y) {
-  ajustar_ingenuo(y)
+  ajustar_ses(y, alpha = alpha_s3)
 }
 
 err_s1 <- errores_ganador(datos1$y, ganador_s1, n0 = n0_1)
@@ -1565,7 +1552,7 @@ mostrar_tabla <- function(resultado, titulo) {
 }
 ```
 
-### Elementos de las pruebas diagnósticas
+**Elementos de las pruebas diagnósticas**
 
 **1.Prueba t de media cero**
 
@@ -1776,7 +1763,7 @@ mostrar_tabla(val_s1, "Pruebas diagnóstico — Serie 1")
 
 En la validación de la Serie 1, la media de los errores no difiere de cero y su distribución es normal, lo que valida los supuestos para construir bandas de confianza. El estadístico de Durbin–Watson confirma ausencia de autocorrelación fuerte de orden 1. Sin embargo, la prueba de Ljung–Box detecta dependencia serial conjunta: aunque el modelo capta correctamente la tendencia y la estacionalidad de la serie, no incorpora la dependencia de corto plazo entre observaciones consecutivas. Esta estructura remanente es de magnitud reducida y no afecta la normalidad ni la ausencia de sesgo, por lo que el pronóstico con banda de confianza es válido, aunque podría mejorarse a muy corto plazo complementando el modelo con un término autorregresivo.
 
-### Serie 2 — Ganador: Tendencia cuadrática
+**Serie 2 — Ganador: Tendencia cuadrática**
 
 **Gráfico de errores en el tiempo:**
 
@@ -1800,7 +1787,7 @@ mostrar_tabla(val_s2, "Pruebas diagnóstico — Serie 2")
 
 En la validación de la Serie 2, la media de los errores no difiere de cero y su distribución es normal, lo que valida los supuestos para el cálculo de intervalos de confianza. El estadístico de Durbin–Watson confirma ausencia de autocorrelación fuerte de orden 1. La prueba de Ljung–Box detecta dependencia serial conjunta: el modelo recoge adecuadamente la tendencia de la serie, pero no incorpora la influencia inmediata de un periodo sobre el siguiente. Esta estructura remanente es de corta duración y no afecta la validez de los pronósticos a mediano y largo plazo; para predicciones a un paso adelante, el modelo podría complementarse con un término autorregresivo de orden 1.
 
-### Serie 3 — Ganador: Ingenuo
+**Serie 3 — Ganador: Ingenuo**
 
 **Gráfico de errores en el tiempo**
 
@@ -1825,6 +1812,151 @@ mostrar_tabla(val_s3, "Pruebas diagnóstico — Serie 3")
 En la validación de la Serie 3, la media de los errores no difiere de cero y su distribución es normal, lo que permite construir intervalos de confianza válidos. Sin embargo, las pruebas detectan dependencia remanente más pronunciada que en las otras series: tanto Ljung–Box como Durbin–Watson confirman autocorrelación positiva de orden 1. Esto indica que el referente ingenuo recoge adecuadamente el nivel de la serie, pero no incorpora la fuerte influencia inmediata entre un periodo y el siguiente.
 
 **(e)** Pronóstico final. Con el ganador reajustado sobre toda la serie, los $H$ pronósticos siguientes graficados junto al último tramo de la serie, con una banda heurística de ±1,96 veces la desviación de los errores de origen móvil a cada horizonte, declarada como heurística.
+
+```{r}
+pronostico_final <- function(datos, metodo, H, n0, unidad_fecha,
+                             ventana, nombre) {
+  modelo_final <- metodo(datos$y)
+  pronosticos <- as.numeric(modelo_final$pronosticar(H))
+  
+  validaciones <- lapply(seq_len(H), function(h) {
+    origen_movil(
+      y = datos$y,
+      metodo = metodo,
+      h = h,
+      n0 = n0
+    )
+  })
+  
+  desv_error <- vapply(
+    validaciones,
+    function(x) sd(x$errores),
+    numeric(1)
+  )
+  
+  num_origenes <- vapply(
+    validaciones,
+    function(x) length(x$errores),
+    integer(1)
+  )
+  
+  fechas_futuras <- seq.Date(
+    from = max(datos$fecha),
+    by = unidad_fecha,
+    length.out = H + 1
+  )[-1]
+  
+  tabla <- data.frame(
+    Horizonte = seq_len(H),
+    Fecha = fechas_futuras,
+    Pronostico = pronosticos,
+    Desviacion_error = desv_error,
+    Limite_inferior = pronosticos - 1.96 * desv_error,
+    Limite_superior = pronosticos + 1.96 * desv_error,
+    Origenes = num_origenes
+  )
+  
+  observados <- tail(
+    data.frame(Fecha = datos$fecha, Valor = datos$y),
+    ventana
+  )
+  
+  grafico <- ggplot() +
+    geom_ribbon(
+      data = tabla,
+      aes(
+        x = Fecha,
+        ymin = Limite_inferior,
+        ymax = Limite_superior
+      ),
+      fill = "steelblue",
+      alpha = 0.2
+    ) +
+    geom_line(
+      data = observados,
+      aes(x = Fecha, y = Valor, color = "Observado"),
+      linewidth = 0.7
+    ) +
+    geom_line(
+      data = tabla,
+      aes(x = Fecha, y = Pronostico, color = "Pronostico"),
+      linewidth = 0.8
+    ) +
+    geom_point(
+      data = tabla,
+      aes(x = Fecha, y = Pronostico, color = "Pronostico"),
+      size = 2
+    ) +
+    scale_color_manual(
+      values = c("Observado" = "gray35", "Pronostico" = "steelblue")
+    ) +
+    labs(
+      title = paste("Pronostico final —", nombre),
+      x = "Fecha",
+      y = "Valor",
+      color = NULL,
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  
+  list(tabla = tabla, grafico = grafico)
+}
+
+H1 <- 12
+H2 <- 6
+H3 <- 6
+
+final_s1 <- pronostico_final(
+  datos = datos1,
+  metodo = ganador_s1,
+  H = H1,
+  n0 = n0_1,
+  unidad_fecha = "month",
+  ventana = 36,
+  nombre = "Serie 1"
+)
+
+final_s2 <- pronostico_final(
+  datos = datos2,
+  metodo = ganador_s2,
+  H = H2,
+  n0 = n0_2,
+  unidad_fecha = "week",
+  ventana = 18,
+  nombre = "Serie 2"
+)
+
+final_s3 <- pronostico_final(
+  datos = datos3,
+  metodo = ganador_s3,
+  H = H3,
+  n0 = n0_3,
+  unidad_fecha = "week",
+  ventana = 18,
+  nombre = "Serie 3"
+)
+```
+
+- Serie 1:
+
+```{r}
+print(final_s1$tabla)
+print(final_s1$grafico)
+```
+
+- Serie 2:
+
+```{r}
+print(final_s2$tabla)
+print(final_s2$grafico)
+```
+
+- Serie 3:
+
+```{r}
+print(final_s3$tabla)
+print(final_s3$grafico)
+```
 
 ## Conclusión técnica
 
