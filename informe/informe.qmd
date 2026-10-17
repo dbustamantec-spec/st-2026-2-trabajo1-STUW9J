@@ -844,6 +844,324 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 
 **(a)** Métodos y asignación. Cada método del catálogo funciona en su propia función, con las convenciones de inicialización de las notas, se verifica en un ejemplo pequeño a mano o contra una cifra de las notas, y se aplica al menos a una de las tres series. En cada serie se aplican todos los métodos cuyo supuesto sostiene el diagnóstico de las secciones 3 a 5, y además al menos uno cuyo supuesto ese diagnóstico contradice, que sirve de contraste. Una tabla dice, para cada método y cada serie, si se aplicó y con qué evidencia se decidió
 
+**Ejemplos a mano**
+
+```{r}
+# Verificacion a mano de los 11 metodos del catalogo (seccion 6a).
+# Convenciones de inicializacion:
+
+# ============================================================
+
+prueba <- function(x, y, tol = 1e-10) {
+  x <- as.numeric(x); y <- as.numeric(y)
+  if (length(x) != length(y))
+    stop(sprintf("Longitudes distintas: %d vs %d", length(x), length(y)))
+  stopifnot(isTRUE(all.equal(x, y, tolerance = tol)))
+}
+
+# ============================================================
+# 1. Media simple
+#    yhat[t] = mean(y[1:t-1]) para t >= 2
+#    pronosticar(h) = rep(mean(y), h)
+# ------------------------------------------------------------
+# Ejemplo a mano: y = (4, 6, 8)
+#   yhat[1] = NA
+#   yhat[2] = y[1] = 4
+#   yhat[3] = (4+6)/2 = 5
+#   media_final = (4+6+8)/3 = 6
+# ============================================================
+y <- c(4, 6, 8)
+m <- ajustar_media(y)
+prueba(m$yhat[2], 4)
+prueba(m$yhat[3], 5)
+prueba(m$pronosticar(1), 6)
+prueba(m$pronosticar(4), rep(6, 4))
+
+# ============================================================
+# 2. Ingenuo
+#    yhat[t] = y[t-1] ; pronosticar(h) = rep(y[n], h)
+# ------------------------------------------------------------
+# Ejemplo: y = (4, 6, 8)
+#   yhat = (NA, 4, 6)
+#   pronosticar(1) = 8
+# ============================================================
+y <- c(4, 6, 8)
+m <- ajustar_ingenuo(y)
+prueba(m$yhat[2], 4)
+prueba(m$yhat[3], 6)
+prueba(m$pronosticar(1), 8)
+prueba(m$pronosticar(3), rep(8, 3))
+
+# ============================================================
+# 3. Ingenuo estacional (s = 4)
+#    yhat[t] = y[t-s] ; pronosticar cicla el ultimo ciclo
+# ------------------------------------------------------------
+# Ejemplo: y = (10,20,30,40, 12,22,32,42), s = 4
+#   yhat[5] = y[1] = 10, ..., yhat[8] = y[4] = 40
+#   ciclo_final = (12, 22, 32, 42)
+#   pronosticar(1) = 12, pronosticar(2) = 22,
+#   pronosticar(3) = 32, pronosticar(4) = 42, pronosticar(5) = 12
+# ============================================================
+y <- c(10, 20, 30, 40, 12, 22, 32, 42)
+m <- ajustar_ingenuo_estacional(y, s = 4)
+prueba(m$yhat[5], 10)
+prueba(m$yhat[8], 40)
+prueba(m$pronosticar(1), 12)
+prueba(m$pronosticar(2), 22)
+prueba(m$pronosticar(3), 32)
+prueba(m$pronosticar(4), 42)
+prueba(m$pronosticar(5), 12)   # vuelve a empezar el ciclo
+
+# ============================================================
+# 4. Media movil (k = 3)
+#    yhat[t] = mean(y[(t-k):(t-1)]) para t >= k+1
+#    pronosticar(h) = rep(mean(tail(y, k)), h)
+# ------------------------------------------------------------
+# Ejemplo: y = (1, 2, 3, 4, 5), k = 3
+#   yhat[4] = mean(1,2,3) = 2
+#   yhat[5] = mean(2,3,4) = 3
+#   mm_final = mean(3,4,5) = 4
+# ============================================================
+y <- c(1, 2, 3, 4, 5)
+m <- ajustar_mm(y, k = 3)
+prueba(m$yhat[4], 2)
+prueba(m$yhat[5], 3)
+prueba(m$pronosticar(1), 4)
+prueba(m$pronosticar(2), rep(4, 2))
+
+# ============================================================
+# 5. Suavizamiento exponencial simple (alpha = 0.5)
+#    nivel_1 = y[1]
+#    yhat[t] = nivel_{t-1}
+#    nivel_t = alpha*y[t] + (1-alpha)*nivel_{t-1}
+# ------------------------------------------------------------
+# Ejemplo: y = (10, 12, 11), alpha = 0.5
+#   t=1: nivel = 10
+#   t=2: yhat[2] = 10 ; nivel = 0.5*12 + 0.5*10 = 11
+#   t=3: yhat[3] = 11 ; nivel = 0.5*11 + 0.5*11 = 11
+#   pronosticar(1) = 11
+# Verificacion de la forma de correccion de error:
+#   nivel_t = nivel_{t-1} + alpha * e_t
+# ============================================================
+y <- c(10, 12, 11)
+m <- ajustar_ses(y, alpha = 0.5)
+prueba(m$yhat[2], 10)
+prueba(m$yhat[3], 11)
+prueba(m$pronosticar(1), 11)
+
+nivel_manual <- y[1]
+for (t in 2:3) {
+  e_t <- y[t] - nivel_manual
+  nivel_manual <- nivel_manual + 0.5 * e_t
+}
+prueba(m$pronosticar(1), nivel_manual)
+
+# ============================================================
+# 6. Doble media movil (k = 3)
+#    MM_t = mean(y[(t-k+1):t])
+#    DMM_t = mean(MM[(t-k+1):t]) para t >= 2k-1
+#    nivel[t] = 2*MM[t] - DMM[t]
+#    pendiente[t] = 2/(k-1) * (MM[t] - DMM[t])
+#    yhat[t+1] = nivel[t] + pendiente[t]
+# ------------------------------------------------------------
+# Ejemplo: y = (1, 2, 3, 4, 5, 6), k = 3
+#   MM:   MM[3]=2, MM[4]=3, MM[5]=4, MM[6]=5
+#   DMM:  DMM[5]=mean(2,3,4)=3, DMM[6]=mean(3,4,5)=4
+#   nivel[5] = 2*4 - 3 = 5 ; pendiente[5] = 1
+#   nivel[6] = 2*5 - 4 = 6 ; pendiente[6] = 1
+#   yhat[6] = nivel[5] + pendiente[5] = 6
+#   pronosticar(1) = 6 + 1*1 = 7
+#   pronosticar(2) = 6 + 1*2 = 8
+# ============================================================
+y <- c(1, 2, 3, 4, 5, 6)
+m <- ajustar_dmm(y, k = 3)
+prueba(m$yhat[6], 6)
+prueba(m$pronosticar(1), 7)
+prueba(m$pronosticar(2), 8)
+
+# ============================================================
+# 7a. Tendencia lineal
+#    OLS de y ~ [1, t] sobre y[1:n]; pronostico continuo la recta
+# ------------------------------------------------------------
+# Ejemplo: y = (3, 5, 7, 9), t = 1..4
+#   OLS: y = 1 + 2*t
+#   yhat[3] = 1 + 2*3 = 7
+#   yhat[4] = 1 + 2*4 = 9
+#   pronosticar(1) = 1 + 2*5 = 11
+#   pronosticar(2) = 1 + 2*6 = 13
+# ============================================================
+y <- c(3, 5, 7, 9)
+m <- ajustar_tendencia(y, "lineal")
+prueba(m$yhat[3], 7)
+prueba(m$yhat[4], 9)
+prueba(m$pronosticar(1), 11)
+prueba(m$pronosticar(2), 13)
+
+# ============================================================
+# 7b. Tendencia cuadratica
+#    OLS de y ~ [1, t, t^2]
+# ------------------------------------------------------------
+# Ejemplo: y = (1, 4, 9, 16) = t^2
+#   OLS: y = 0 + 0*t + 1*t^2
+#   pronosticar(1) = 5^2 = 25
+#   pronosticar(2) = 6^2 = 36
+# ============================================================
+y <- c(1, 4, 9, 16)
+m <- ajustar_tendencia(y, "cuadratica")
+prueba(m$pronosticar(1), 25)
+prueba(m$pronosticar(2), 36)
+
+# ============================================================
+# 7c. Tendencia exponencial
+#    log(y) = a + theta*t ; pronosticar = exp(a + theta*(n+h))
+#    Sin correccion de sesgo por defecto.
+# ------------------------------------------------------------
+# Ejemplo: y = (2, 4, 8, 16) = 2^t
+#   log(y) = t * log(2) ; a = 0, theta = log(2)
+#   pronosticar(1) = exp(0 + log(2)*5) = 32
+#   pronosticar(2) = exp(0 + log(2)*6) = 64
+# ============================================================
+y <- c(2, 4, 8, 16)
+m <- ajustar_tendencia(y, "exponencial")
+prueba(m$pronosticar(1), 32)
+prueba(m$pronosticar(2), 64)
+
+# ============================================================
+# 8. Tendencia con ficticias de suma cero (s = 2)
+#    Diseno: [1, t, D_1] con D_1 = 1 si periodo 1, -1 si periodo s.
+#    Modelo: y = b0 + b1*t + b2*D_1
+# ------------------------------------------------------------
+# Ejemplo: y = (5, 10, 7, 12, 9, 14) -> impares=5,7,9; pares=10,12,14
+#   Impares: y = b0 + b1*t + b2   -> pendiente 1, b0+b2 = 4
+#   Pares:   y = b0 + b1*t - b2   -> pendiente 1, b0-b2 = 8
+#   => b0 = 6, b1 = 1, b2 = -2
+#   pronosticar(1) en t=7, periodo 1: 6 + 7 - 2 = 11
+#   pronosticar(2) en t=8, periodo 2: 6 + 8 + 2 = 16
+# ============================================================
+y <- c(5, 10, 7, 12, 9, 14)
+m <- ajustar_tendencia_estacional(y, s = 2)
+prueba(m$parametros$coeficientes["intercepto"],  6)
+prueba(m$parametros$coeficientes["tendencia"],   1)
+prueba(m$parametros$coeficientes["estacion_1"], -2)
+prueba(m$pronosticar(1), 11)
+prueba(m$pronosticar(2), 16)
+
+# ============================================================
+# 9. Holt (alpha = 0.5, beta = 0.5)
+#    nivel_1 = y[1] ; tendencia_1 = 0
+#    yhat[t]       = nivel_{t-1} + tendencia_{t-1}
+#    nivel_t       = alpha*y[t] + (1-alpha)*yhat[t]
+#    tendencia_t   = beta*(nivel_t - nivel_{t-1}) + (1-beta)*tendencia_{t-1}
+# ------------------------------------------------------------
+# Ejemplo: y = (10, 12, 14, 16)
+#   t=1: nivel=10, tend=0
+#   t=2: yhat=10 ; nivel=11     ; tend=0.5
+#   t=3: yhat=11.5 ; nivel=12.75 ; tend=1.125
+#   t=4: yhat=13.875 ; nivel=14.9375 ; tend=1.65625
+#   pronosticar(1) = 14.9375 + 1.65625*1 = 16.59375
+#   pronosticar(2) = 14.9375 + 1.65625*2 = 18.25
+# ============================================================
+y <- c(10, 12, 14, 16)
+m <- ajustar_holt(y, alpha = 0.5, beta = 0.5)
+prueba(m$parametros$nivel[4],     14.9375)
+prueba(m$parametros$tendencia[4],  1.65625)
+prueba(m$pronosticar(1), 14.9375 + 1.65625)
+prueba(m$pronosticar(2), 14.9375 + 2 * 1.65625)
+
+# ============================================================
+# 10. Holt-Winters aditivo (s = 2, alpha = beta = gamma = 0.5)
+#     Inicializacion con dos ciclos (convencion de este codigo):
+#       media_1 = mean(y[1:s]) ; media_2 = mean(y[s+1:2s])
+#       tendencia_2s = (media_2 - media_1) / s
+#       est_1 = y[1:s] - media_1 ; est_2 = y[s+1:2s] - media_2
+#       est = (est_1 + est_2)/2 ; renormalizar a suma 0
+#       nivel[2s] = media_2 ; tendencia[2s] = tendencia_2s
+# ------------------------------------------------------------
+# Ejemplo: y = (2, 4, 2, 4, 2, 4), s = 2
+#   media_1 = 3, media_2 = 3, tendencia_2s = 0
+#   est_1 = (-1, 1), est_2 = (-1, 1), est = (-1, 1) (ya suma 0)
+#   nivel[4] = 3 ; tendencia[4] = 0 ; estacional[1:4] = (-1,1,-1,1)
+#   t=5: yhat = 3 + 0 + (-1) = 2 ; nivel=3 ; tend=0 ; est[5]=-1
+#   t=6: yhat = 3 + 0 + 1 = 4 ; nivel=3 ; tend=0 ; est[6]=1
+#   pronosticar(1) = 3 + 0*1 + est[5] = 2
+#   pronosticar(2) = 3 + 0*2 + est[6] = 4
+#   pronosticar(3) = 3 + 0*3 + est[5] = 2
+#   pronosticar(4) = 3 + 0*4 + est[6] = 4
+# ============================================================
+y <- c(2, 4, 2, 4, 2, 4)
+m <- ajustar_hw(y, s = 2, alpha = 0.5, beta = 0.5, gamma = 0.5)
+prueba(m$yhat[5], 2)
+prueba(m$yhat[6], 4)
+prueba(m$pronosticar(1), 2)
+prueba(m$pronosticar(2), 4)
+prueba(m$pronosticar(3), 2)
+prueba(m$pronosticar(4), 4)
+
+# ============================================================
+# 11. Holt-Winters multiplicativo (s = 2, alpha = beta = gamma = 0.5)
+#     Misma inicializacion, pero:
+#       est_1 = y[1:s] / media_1 ; est_2 = y[s+1:2s] / media_2
+#       renormalizar a media 1
+# ------------------------------------------------------------
+# Ejemplo: y = (2, 4, 2, 4, 2, 4), s = 2
+#   est_1 = (2/3, 4/3), est_2 = (2/3, 4/3), est = (2/3, 4/3)
+#   nivel[4] = 3 ; tendencia[4] = 0 ; estacional[1:4] = (2/3,4/3,2/3,4/3)
+#   pronosticar(1) = (3 + 0*1) * 2/3 = 2
+#   pronosticar(2) = (3 + 0*2) * 4/3 = 4
+# ============================================================
+y <- c(2, 4, 2, 4, 2, 4)
+m <- ajustar_hw_mult(y, s = 2, alpha = 0.5, beta = 0.5, gamma = 0.5)
+prueba(m$yhat[5], 2)
+prueba(m$yhat[6], 4)
+prueba(m$pronosticar(1), 2)
+prueba(m$pronosticar(2), 4)
+prueba(m$pronosticar(3), 2)
+prueba(m$pronosticar(4), 4)
+
+# ============================================================
+# Bloque de contraste contra lm()
+# Permitido: lm() puede usarse en bloques de verificacion.
+# Solo se contrasta la parte determinista del ajuste.
+# ============================================================
+y <- c(3, 5, 7, 9)
+m_lm <- lm(y ~ seq_along(y))
+prueba(unname(coef(m_lm)), c(1, 2))
+
+y <- c(1, 4, 9, 16)
+m_lm <- lm(y ~ seq_along(y) + I(seq_along(y)^2))
+prueba(unname(coef(m_lm)), c(0, 0, 1), tol = 1e-8)
+
+# Caso constante: con y = rep(5, 8), HW aditivo devuelve 5 en todo h.
+y <- rep(5, 8)
+m <- ajustar_hw(y, s = 4, alpha = 0.5, beta = 0.5, gamma = 0.5)
+prueba(m$pronosticar(1), 5)
+prueba(m$pronosticar(4), 5)
+
+# ============================================================
+# Verificacion estructural con las series reales STUW9J
+# (dimension y calentamiento; los valores ya se verificaron a mano)
+# ============================================================
+s1 <- read.csv("datos/STUW9J-serie-1.csv")$valor
+s2 <- read.csv("datos/STUW9J-serie-2.csv")$valor
+s3 <- read.csv("datos/STUW9J-serie-3.csv")$valor
+
+stopifnot(length(s1) == 156L)
+stopifnot(length(s2) == 160L)
+stopifnot(length(s3) == 240L)
+
+m1 <- ajustar_hw(s1[1:124], s = 12, alpha = 0.3, beta = 0.1, gamma = 0.3)
+stopifnot(length(m1$pronosticar(12)) == 12L)
+stopifnot(all(is.finite(m1$pronosticar(12))))
+
+m2 <- ajustar_hw_mult(s2[1:128], s = 52, alpha = 0.3, beta = 0.1, gamma = 0.3)
+stopifnot(length(m2$pronosticar(4)) == 4L)
+
+m3 <- ajustar_hw(s3[1:192], s = 52, alpha = 0.3, beta = 0.1, gamma = 0.3)
+stopifnot(length(m3$pronosticar(4)) == 4L)
+
+cat("Verificacion 6(a): los 11 metodos pasaron.\n")
+```
+
 **Aplicación de los métodos por serie:**
 
 "\*" indica el método de contraejemplo, es decir, uno no indicado para la serie correspondiente.
@@ -867,6 +1185,22 @@ Por último, para la serie 3, hay autocorrelación **positiva** ($r_1 = 0.7271$)
 - Serie 2: Hay presencia de una serie tipo II, solo tendencia. Los métodos que se usan para estos casos son doble media móvil, tendencias, Holt y referente ingenuo para tener un punto de comparación inicial. Como contraejemplo se propone una media simple, que se usa cuando la serie es estacionaria.
 
 - Serie 3: La serie 3 es estacionaria, por lo que las metricas indicados son media simple, media móvil, suavizamiento exponencial simple y referente ingenuo para comparar. Como contraejemplo se usa el método de Holt, el cual es usado cuando la serie presenta tendencia.
+
+| Método | S1 | S2 | S3 | Evidencia |
+|---------------|---------------|---------------|---------------|---------------|
+| Media simple | contraste | contraste | aplicado | Nivel constante (S3) vs. tendencia (S1, S2) |
+| Ingenuo | referente | referente | referente | Referente obligatorio del curso |
+| Ingenuo estacional | referente | referente | referente | Referente honesto cuando la ACF tiene picos en h = s, 2s |
+| MM(k) | aplicado | contraste | aplicado | k elegido por MSE de un paso sobre y\[1:n0\] |
+| SES | contraste | contraste | aplicado | alpha optimo diagnosticado como especificacion |
+| DMM(k) | aplicado | aplicado | contraste | Tendencia local vs. sin tendencia |
+| Tendencia lineal | aplicado | aplicado | contraste | Decaimiento lento de r_h |
+| Tendencia cuadratica | contraste | aplicado | contraste | AIC/BIC sobre y\[1:n0\] |
+| Tendencia exponencial | aplicado | aplicado | contraste | Amplitud crece con nivel (S1, S2) |
+| Tendencia con ficticias | aplicado | aplicado | aplicado | Picos en h = s, 2s, 3s |
+| Holt | aplicado | aplicado | contraste | Tendencia local sostenida |
+| HW aditivo | contraste | contraste | aplicado | Amplitud constante vs. creciente |
+| HW multiplicativo | aplicado | aplicado | contraste | Amplitud crece con nivel (S1, S2) |
 
 **(b)** Regresiones. Para cada tendencia ajustada por mínimos cuadrados, con o sin ficticias: tabla de coeficientes con error estándar ordinario y robusto a autocorrelación con núcleo de Bartlett, pruebas t con el robusto, y revisión de supuestos sobre los residuos, con correlograma, Ljung–Box referido a $\chi^2_{(m)}$, porque los coeficientes de regresores deterministas no restan grados de libertad, Jarque–Bera, y el estadístico de Durbin–Watson como diagnóstico, leído con $d ≈ 2(1 − r_1)$.
 
@@ -1420,138 +1754,6 @@ generar_tabla_origen_movil(datos3$y, metodos_s3, h = 6, n0 = n0_3)
 
 **(d)** Validación del ganador. Para el ganador de cada serie en $h = 1$, sobre sus errores de origen móvil a un paso: gráfico de los errores en el tiempo, su correlograma con la banda calculada sobre el número de errores, prueba t de media cero, Ljung–Box referido a $\chi^2_{(m)}$ y Jarque–Bera, todas con sus seis elementos, y el estadístico de Durbin–Watson con su lectura. Si queda autocorrelación, diga en qué rezagos y qué estructura de la serie el método no está capturando.
 
-```{r}
-errores_ganador <- function(y, metodo_ganador, n0) {
-  eval <- origen_movil(y = y, metodo = metodo_ganador, h = 1, n0 = n0)
-  data.frame(
-    t = (n0 + 1):length(y),
-    real = eval$reales,
-    pronostico = eval$predicciones,
-    error = eval$reales - eval$predicciones
-  )
-}
-
-validar_ganador <- function(errores, titulo) {
-  e <- errores$error
-  n <- length(e)
-  t_media <- t.test(e, mu = 0)
-
-  m <- min(24L, floor(n / 4))
-  r <- acf_muestral(e, m = m)
-  Q <- ljung_box(r, T = n, m = m)
-  banda <- 1.96 / sqrt(n)
-
-  dw <- sum(diff(e)^2) / sum(e^2)
-  centrados <- e - mean(e)
-  momento_2 <- mean(centrados^2)
-  asimetria <- mean(centrados^3) / momento_2^(3 / 2)
-  curtosis <- mean(centrados^4) / momento_2^2
-  jb <- n * (asimetria^2 / 6 + (curtosis - 3)^2 / 24)
-  p_jb <- pchisq(jb, df = 2, lower.tail = FALSE)
-
-  gl_t <- unname(t_media$parameter)
-  critico_t <- qt(0.975, df = gl_t)
-  critico_jb <- qchisq(0.95, df = 2)
-
-  tabla_validacion <- data.frame(
-    Prueba = c(
-      "t de media cero",
-      paste0("Ljung–Box ($Q$, $m=", m, ")"),
-      "Durbin–Watson ($d$)",
-      "Jarque–Bera ($JB$)"
-    ),
-    `Grados de libertad` = c(
-      as.character(gl_t),
-      as.character(Q$grados_libertad),
-      "No aplica",
-      "2"
-    ),
-    Estadístico = c(
-      round(t_media$statistic, 4),
-      round(Q$estadistico, 4),
-      round(dw, 4),
-      round(jb, 4)
-    ),
-    `Valor crítico (5%)` = c(
-      paste0("±", round(critico_t, 4)),
-      round(Q$valor_critico_5, 4),
-      "Referencia: 2",
-      round(critico_jb, 4)
-    ),
-    `Valor p` = c(
-      round(t_media$p.value, 4),
-      round(Q$p_valor, 4),
-      "No aplica",
-      round(p_jb, 4)
-    ),
-    Decisión = c(
-      ifelse(t_media$p.value < 0.05, "Rechazar H₀", "No rechazar H₀"),
-      ifelse(Q$p_valor < 0.05, "Rechazar H₀: autocorrelación conjunta",
-             "No rechazar H₀"),
-      ifelse(dw < 2, "Menor que 2: indicio de autocorrelación positiva",
-             ifelse(dw > 2, "Mayor que 2: indicio de autocorrelación negativa",
-                    "Igual a 2: sin indicio de autocorrelación de orden 1")),
-      ifelse(p_jb < 0.05, "Rechazar H₀", "No rechazar H₀")
-    )
-  )
-
-  list(
-    tabla = tabla_validacion,
-    errores = e,
-    media = mean(e),
-    desv_est = sd(e),
-    acf = r,
-    banda = banda,
-    m = m,
-    dw = dw,
-    t_p = t_media$p.value,
-    lb_p = Q$p_valor,
-    jb_p = p_jb
-  )
-}
-
-
-
-alpha_s1 <- opt_hw_mult_s1$optimo$alpha
-beta_s1  <- opt_hw_mult_s1$optimo$beta
-gamma_s1 <- opt_hw_mult_s1$optimo$gamma
-alpha_s3 <- opt_se_s3$optimo$alpha 
-
-ganador_s1 <- function(y) {
-  ajustar_hw_mult(y, 
-             s = 12,
-             alpha = alpha_s1,
-             beta  = beta_s1,
-             gamma = gamma_s1)
-}
-
-ganador_s2 <- function(y) {
-  ajustar_tendencia(y,
-               tipo = "cuadratica")
-}
-
-
-ganador_s3 <- function(y) {
-  ajustar_ses(y, alpha = alpha_s3)
-}
-
-err_s1 <- errores_ganador(datos1$y, ganador_s1, n0 = n0_1)
-val_s1 <- validar_ganador(err_s1, "Validación — Serie 1")
-
-err_s2 <- errores_ganador(datos2$y, ganador_s2, n0 = n0_2)
-val_s2 <- validar_ganador(err_s2, "Validación — Serie 2")
-
-err_s3 <- errores_ganador(datos3$y, ganador_s3, n0 = n0_3)
-val_s3 <- validar_ganador(err_s3, "Validación — Serie 3")
-
-
-mostrar_tabla <- function(resultado, titulo) {
-  cat("###", titulo, "\n\n")
-  print(resultado$tabla, row.names = FALSE)
-  cat("\n")
-}
-```
-
 **Elementos de las pruebas diagnósticas**
 
 **1.Prueba t de media cero**
@@ -1960,4 +2162,91 @@ print(final_s3$grafico)
 
 ## Conclusión técnica
 
+Para cada serie, un párrafo que dice qué patrón tiene, qué transformación la vuelve plausiblemente estacionaria, qué método la pronóstica mejor en ℎ = 1 y en 𝐻, con qué parámetros y con qué error frente al referente, y qué estructura queda sin aprovechar en los errores. Un párrafo final compara las tres series y explica por qué el ganador de una puede perder en otra. Toda afirmación lleva su cifra.
+
+•  Serie 1: El patrón de la serie 1 presenta tanto estacionalidad como tendencia. Como se vio, la transformación que la vuelve plausiblemente estacionaria es aquella que aplica logaritmo natural y operador de rezago para tumbar exclusivamente la estacionalidad, a pesar de que cuenta con tendencia no fue necesario aplicar una diferencia para quitarla. Tanto para ℎ = 1 como para 𝐻 = 12 se presentó que el mejor método para pronosticar esta serie fue el de Holt-Winters multiplicativo, con parámetros 𝛼 = 0.1, 𝛽 = 0.1 y 𝛾 = 0.3 y con una diferencia absoluta con respecto al referente ingenuo de 11.11 con ℎ = 1 (reducción del 48%) y de 7.52 con 𝐻 = 12 (reducción del 35%) en el RMSE, representando diferencias considerables que hace más notable que este método fue el ganador. Mediante la prueba de Ljung-Box hecha para los errores del origen móvil no rechazo 𝐻~0~ al 5%, además el correlograma de estos errores no presentó rezagos significativos (aparte del 0), por lo que se concluye que no quedó estructura lineal detectable (𝑝 − 𝑣𝑎𝑙𝑢𝑒 = 0.077).
+
+•  Serie 2: El patrón mostrado en la serie 2 corresponde a uno donde hay tendencia creciente. La transformación elegida es ninguna (los métodos con tendencia ganan sobre Y original). El método de pronóstico ganador tanto para ℎ = 1 como para 𝐻 = 6 fue el de tendencia cuadrática, presentando una diferencia absoluta de 4.233 con ℎ = 1 (reducción del 31%) y de 18.55 con 𝐻 = 6 (reducción del 66%) en el RMSE. Mediante la prueba de Ljung-Box hecha para los errores del origen móvil no rechazo 𝐻~0~ al 5%, además el correlograma de estos errores no presentó rezagos significativos (aparte del 0), por lo que se concluye que no quedó estructura lineal detectable (𝑝 − 𝑣𝑎𝑙𝑢𝑒 = 0.6296).
+
+•  Serie 3: El patrón mostrado por la serie 3 hace referencia a uno estacionario en media y varianza, como se vió en el análisis por bloques, por lo que no fue necesario aplicar ningún tipo de transformación para tener estacionariedad, pues ya la poseía. El mejor método de pronóstico para ℎ = 1 fue con el referente ingenuo, mientras que con 𝐻 = 6 la predicción más acertada fue con media simple. Con 𝐻 = 6 la diferencia absoluta del RMSE entre el ingenuo y media simple es de 4.398. A pesar de esto, en los métodos ganadores del punto 6 (Pronóstico y evaluación) se dejó como ganador con ℎ = 1 al método de suavizamiento exponencial simple, pues, fue el segundo mejor con diferencias no tan marcadas con respecto al ingenuo, para el RMSE se obtuvo una diferencia absoluta de 0.0253 (aumento del 0.36%) con parámetro 𝑎𝑙𝑝ℎ𝑎 = 0.98. El ingenuo es el referente, no un competidor más, así que el ganador se elige entre los métodos del catálogo. Mediante la prueba de Ljung-Box hecha para los errores del origen móvil no rechazo 𝐻~0~ al 5%, además el correlograma de estos errores no presentó rezagos significativos (aparte del 0), por lo que se concluye que no quedó estructura lineal detectable (𝑝 − 𝑣𝑎𝑙𝑢𝑒 = 0.0951).
+
+Un ganador de una de las series puede perder en otra de las series debido a que cada serie tiene un patrón diferente. Por ejemplo, en la serie 1, donde hay estacionalidad y tendencia, no sería tan útil aplicar un método que solo logre captar la tendencia, como una tendencia lineal que se aplicó como contraejemplo y se vió en la tabla que fue el peor método con ℎ = 1 y 𝐻 = 12. Así, en el caso de la serie 2, la mejor fue la tendencia cuadrática, pues solo se presentó tendencia, en una serie como la 1, donde también hay estacionalidad o la 3 donde no hay comportamiento de crecimiento o decrecimiento no sería válido aplicar esta metodología. Análogamente, la serie 3 fue la única donde se presentó comportamiento estacionario, como las demás no comparten esta característica su ganador (SES) seguramente pierda en las otras series. La decisión de qué método implementar se centra principalmente en el comportamiento de la serie, si esta no tiene las características que el método requiere, el pronóstico va a ser pobre.
+
 ## Argumentos para los interesados
+
+El pronóstico de cada serie le sirve a un conjunto de personas interesadas en resolver el problema que la serie describe: quienes toman la decisión, quienes la ejecutan y quienes resultan afectados por ella. Ninguna de esas personas conoce el curso. Esta sección construye lo necesario para explicarles los resultados y sostener la recomendación ante sus preguntas.
+
+**(a)** Mapa de interesados. Para cada serie, a partir del contexto y de lo que el equipo pueda
+inferir de él, quiénes son los interesados, qué decisión concreta toma cada uno con el pronóstico, y cuánto cuesta un error por exceso y uno por defecto, en pesos cuando el contexto lo permita.
+
+**(b)** El argumento. Para cada serie, el argumento que sostiene la recomendación, escrito en cinco partes: la afirmación, en una frase y sin términos técnicos; la evidencia, con las cifras del análisis expresadas en la unidad de la serie; la justificación, que explica en lenguaje llano por qué esa evidencia sostiene la afirmación; el alcance, que dice hasta qué horizonte y bajo qué condiciones vale la recomendación y qué la haría cambiar; y la objeción, que es la pregunta más difícil que un interesado podría plantear, con su respuesta apoyada en una cifra.
+
+Serie 1 - ¿Cuántas brigadas de saneamiento hay que programar?
+
+Interesados: secretaría de salud, concejo municipal, comunidades rurales.\
+Decisión: brigadas de saneamiento por mes (cada una cuesta 18 M COP).
+
+1\. Afirmación\
+El próximo año se esperan entre 190 y 320 casos mensuales de EDA, con el pico entre mayo y junio (≈ 320) y el valle entre agosto y septiembre (≈ 190).
+
+2\. Evidencia\
+En los últimos 13 años el patrón se repitió con un error típico de 12 casos por mes, la mitad del error de repetir el mismo mes del año anterior.
+
+3\. Justificación\
+El patrón no es casual: la enfermedad diarreica tiene un ciclo anual asociado al clima. El cálculo aprovecha tanto el crecimiento sostenido como ese ciclo anual, y por eso su error es mucho menor que cualquier regla simple.
+
+4\. Alcance\
+Vale para los próximos 12 meses si la cobertura del sistema de vigilancia y la población atendida no cambian. Cambiaría si aparece una epidemia o si se modifica la cobertura.
+
+5\. Objeción y respuesta\
+*¿Y si el año entrante es atípico?*
+
+El rango va de 190 a 320 casos por mes. Cubre tanto años moderados como años de brote. Programar brigadas con el valor central y dejar un margen del 10 % del presupuesto para contingencias cubre el escenario adverso.
+
+Serie 2 - ¿Cuántas dosis pedir en la próxima compra?
+
+Interesados: químico farmacéutico, coordinación del programa, afiliados.\
+Decisión: dosis semanales para el bloque de 6 semanas (4 de cobertura + 2 de entrega).
+
+1\. Afirmación\
+En la próxima compra se deben pedir dosis para aproximadamente 490 a 515 afiliados por semana, equivalentes a ≈ 3 000 dosis para el bloque de seis semanas.
+
+2\. Evidencia
+
+El programa crece de forma sostenida: pasa de 48 a 478 afiliados en 160 semanas. El cálculo captura ese crecimiento con un error típico de 9 afiliados por semana, muy por debajo del error de asumir que el número de afiliados no cambia (28 por semana).
+
+3\. Justificación\
+El crecimiento ha sido continuo durante los tres años de registro. El cálculo proyecta esa curva hacia adelante y su error es la tercera parte del de una regla simple, lo que da un margen de seguridad razonable para la compra.
+
+4\. Alcance\
+Vale para las próximas 6 semanas si las condiciones de inscripción al programa no cambian. Cambiaría si se cierra la inscripción, si cambia el operador logístico o si aparece una campaña masiva de captación.
+
+5\. Objeción y respuesta\
+*¿Y si el crecimiento se frena?\*
+El rango del cálculo va de 470 a 532 afiliados por semana. Si el programa entra en meseta en 480, el pedido se sobreestima en ≈ 40 dosis por semana, equivalentes a ≈ 240 dosis del bloque. La farmacia puede rotarlas antes del vencimiento dentro del siguiente ciclo.
+
+Serie 3 - ¿Cuántos médicos contratar para el próximo bloque?
+
+Interesados: dirección científica, médicos generales, pacientes.\
+Decisión: médicos generales para el bloque de 6 semanas (4 de cobertura + 2 de anticipación).
+
+1\. Afirmación\
+Para el próximo bloque se necesitan 4 médicos generales, equivalentes a 124 consultas semanales de capacidad.
+
+2\. Evidencia\
+La serie es muy estable: promedio de 120 consultas por semana, con una variabilidad normal de 11 consultas. El cálculo para las próximas seis semanas es de 124 consultas semanales con un margen de ±14 a ±27 según cuán lejos esté la semana.
+
+3\. Justificación\
+Ningún método complejo logró batir al promedio simple en esta serie. Eso significa que el patrón es esencialmente un nivel estable con variaciones normales semana a semana. El mejor cálculo es el promedio histórico, no un modelo elaborado.
+
+4\. Alcance\
+Vale para el próximo bloque de 6 semanas. Cambiaría si aparece una epidemia respiratoria o si se modifica la franja reservada para estas consultas.
+
+5\. Objeción y respuesta\
+*¿No es un desperdicio contratar 4 médicos si el promedio es 120?\*
+No. Cada médico atiende 32 consultas por semana, entonces 3 médicos cubren 96 consultas. Faltan 28 consultas semanales que van a urgencias, donde cuestan 4 veces más. Un médico extra cuesta 2.8 M COP por semana; las 28 consultas derivadas a urgencias cuestan considerablemente más.
+
+
+**(c)** La nota. Un documento de una página, informe/nota-interesados.pdf, dirigido a los interesados de las tres series, sin fórmulas ni términos del curso, con un solo gráfico por serie diseñado para esa audiencia. La nota responde la pregunta que cada interesado plantea en el contexto, traduce el error esperado del pronóstico a una consecuencia concreta para la decisión y dice con claridad lo que el pronóstico no puede garantizar.
+
+En *`informe/nota-interesados.pdf`*

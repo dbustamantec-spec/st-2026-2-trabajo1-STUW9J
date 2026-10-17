@@ -1,0 +1,101 @@
+---
+title: "Notas interesados"
+format: typst
+editor: visual
+---
+
+**La nota.** Un documento de una página, *`informe/nota-interesados.pdf`*, dirigido a los interesados de las tres series, sin fórmulas ni términos del curso, con un solo gráfico por serie diseñado para esa audiencia. La nota responde la pregunta que cada interesado plantea en el contexto, traduce el error esperado del pronóstico a una consecuencia concreta para la decisión y dice con claridad lo que el pronóstico no puede garantizar.
+
+```{r, include = FALSE}
+library(dplyr);library(ggplot2)
+s1 <- read.csv("../datos/STUW9J-serie-1.csv")
+s2 <- read.csv("../datos/STUW9J-serie-2.csv")
+s3 <- read.csv("../datos/STUW9J-serie-3.csv")
+```
+
+```{r, include = FALSE}
+s1$fecha <- as.Date(s1$fecha)
+s1$mes   <- as.integer(format(s1$fecha, "%m"))
+
+p1 <- ggplot(s1, aes(x = fecha, y = valor)) +
+  geom_line(color = "steelblue", linewidth = 0.6) +
+  annotate("rect",
+           xmin = as.Date("2019-05-01"), xmax = as.Date("2019-06-30"),
+           ymin = 0, ymax = Inf, alpha = 0.15, fill = "red") +
+  annotate("text", x = as.Date("2019-05-15"), y = 240,
+           label = "Pico\nmay-jun", size = 3, color = "red") +
+  labs(x = NULL, y = "Casos por mes",
+       title = "Casos de EDA por mes",
+       subtitle = "Patrón anual estable — pico en mayo-junio") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(face = "bold"))
+
+ggsave("../figs/nota-S1.png", p1, width = 8, height = 3.2, dpi = 300)
+```
+
+```{r, include = FALSE}
+# --- Grafico S2: crecimiento y proyeccion ---
+s2$fecha <- as.Date(s2$fecha)
+pron2 <- data.frame(
+  fecha = seq(max(s2$fecha) + 7, by = "week", length.out = 6),
+  valor = c(489, 494, 498, 503, 508, 512)
+)
+
+p2 <- ggplot() +
+  geom_line(data = s2, aes(fecha, valor),
+            color = "steelblue", linewidth = 0.6) +
+  geom_line(data = pron2, aes(fecha, valor),
+            color = "red", linewidth = 0.8, linetype = "solid") +
+  geom_vline(xintercept = max(s2$fecha),
+             linetype = "dashed", color = "gray40") +
+  annotate("text", x = max(s2$fecha) + 30, y = 250,
+           label = "Próximas\n6 semanas", size = 3, color = "red") +
+  labs(x = NULL, y = "Afiliados por semana",
+       title = "Afiliados al programa de HTA",
+       subtitle = "Crecimiento sostenido — próximo bloque en rojo") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(face = "bold"))
+
+ggsave("../figs/nota-S2.png", p2, width = 8, height = 3.2, dpi = 300)
+```
+
+```{r, include=FALSE}
+# --- Grafico S3: estabilidad ---
+s3$fecha <- as.Date(s3$fecha)
+
+p3 <- ggplot(s3, aes(x = fecha, y = valor)) +
+  geom_line(color = "steelblue", linewidth = 0.5) +
+  geom_hline(yintercept = 120, color = "red",
+             linetype = "dashed", linewidth = 0.6) +
+  annotate("text", x = as.Date("2021-06-01"), y = 135,
+           label = "Promedio 120", size = 3, color = "red") +
+  labs(x = NULL, y = "Consultas por semana",
+       title = "Consultas respiratorias por semana",
+       subtitle = "Serie estable alrededor de 120 consultas") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(face = "bold"))
+
+ggsave("../figs/nota-S3.png", p3, width = 8, height = 3.2, dpi = 300)
+```
+
+Serie 1 - Pregunta: ¿cuántas brigadas de saneamiento programar para el próximo año?
+
+Programar brigadas en los meses de mayor incidencia, con foco en mayo y junio, y reforzar la compra de sales de rehidratación en el primer semestre. En este caso, el cálculo se equivoca en promedio 12 casos por mes, cada brigada programada cuesta 18 millones de pesos, caso contrario si no se programa y aparece un brote, la contratación de urgencia cuesta el doble, con el valor central del pronóstico y un margen del 10 % del presupuesto, la secretaría cubre el escenario adverso sin contrataciones de emergencia. Por otro lado, si aparece un brote inusual o una epidemia por una causa nueva (agua contaminada, desplazamiento de población), el pronóstico no lo anticipa. El margen de contingencia es la red de seguridad.
+
+```{r, echo = FALSE}
+p1
+```
+
+Serie 2 - Pregunta: ¿cuántas dosis pedir en la próxima compra?
+
+Pedir dosis para 490 a 515 afiliados por semana durante el próximo bloque de seis semanas, equivalentes a ≈ 3.000 dosis en total. En este caso, el cálculo se equivoca en promedio 9 afiliados por semana, por lo que el pedido tiene un margen de ±40 dosis por semana, además si el crecimiento se frena antes de lo esperado, sobrarían alrededor de 240 dosis, que la farmacia puede rotar dentro del siguiente ciclo antes de que venzan, no obstante si el crecimiento se acelera, el pedido se queda corto en la misma magnitud y habría que hacer un pedido extraordinario. Por otro lado, no anticipa cambios en las reglas de inscripción, cambios de operador logístico ni campañas masivas de captación.
+
+```{r, echo = FALSE}
+p2
+```
+
+Serie 3- Contratar 4 médicos generales para el bloque de seis semanas (cuatro de cobertura más dos de anticipación). En el caso, de que se contrate un médico de menos, las consultas excedentes se represan y terminan en urgencias, donde cada atención cuesta cuatro veces más. Un médico adicional cuesta 2.8 millones de pesos por semana, con 4 médicos se cubren las 124 consultas esperadas sin dejar consultas afuera. Por otro lado, si aparece una epidemia respiratoria estacional (por ejemplo, un pico de influenza), el número de consultas puede superar el rango del pronóstico. En ese caso, la dirección tendría que evaluar un refuerzo adicional fuera del bloque regular.
+
+```{r, echo = FALSE}
+p3
+```
