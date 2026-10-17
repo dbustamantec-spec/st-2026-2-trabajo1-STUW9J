@@ -6,7 +6,7 @@ https://github.com/dbustamantec-spec/st-2026-2-trabajo1-STUW9J.git — Código d
 
 La mayoría de los puntos se hicieron de manera conjunta. En algunos puntos se dividió tareas  para avanzar, pero siempre se trabajó sobre el mismo punto y se compartió la revisión y las decisiones del análisis en cada momento. No se asignaron secciones exclusivas a una sola persona.
 
-| Integrante | Trabajo realizado |
+| Integrantes |
 |---|---|
 | Daniel Bustamante Cortés | 
 | Andrés Felipe López Díaz | 
@@ -15,7 +15,7 @@ La mayoría de los puntos se hicieron de manera conjunta. En algunos puntos se d
 ## Contenido del repositorio
 
 | Archivo o carpeta | Contenido |
-|---|---|---|
+|---|---|
 | `datos/STUW9J-serie-1.csv` | Casos mensuales de enfermedad diarreica aguda. |
 | `datos/STUW9J-serie-2.csv` | Afiliados semanales al programa de hipertensión. |
 | `datos/STUW9J-serie-3.csv` | Consultas semanales por enfermedad respiratoria. |
