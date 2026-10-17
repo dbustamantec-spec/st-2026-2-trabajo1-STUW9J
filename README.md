@@ -7,7 +7,7 @@ https://github.com/dbustamantec-spec/st-2026-2-trabajo1-STUW9J.git — Código d
 La mayoría de los puntos se hicieron de manera conjunta. En algunos puntos se dividió tareas  para avanzar, pero siempre se trabajó sobre el mismo punto y se compartió la revisión y las decisiones del análisis en cada momento. No se asignaron secciones exclusivas a una sola persona.
 
 | Integrantes |
-|---|---|
+|---|
 | Daniel Bustamante Cortés | 
 | Andrés Felipe López Díaz | 
 | Viviana Astrid León Oróstogue | 
