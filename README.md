@@ -10,7 +10,7 @@ La mayoría de los puntos se hicieron de manera conjunta. En algunos puntos se d
 |---|
 | Daniel Bustamante Cortés | 
 | Andrés Felipe López Díaz | 
-| Viviana Astrid León Oróstogue | 
+| Viviana Astrid León Oróstogui | 
 
 ## Contenido del repositorio
 
